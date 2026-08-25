@@ -1487,7 +1487,7 @@ export default function App() {
                                 battle.result === 'Empate' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 
                                 battle.result === 'Interrumpido' ? 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20' :
                                 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 animate-pulse'}`}>
-                              {battle.result === 'En curso' ? `En curso (${formatBattleTime(battle)})` : battle.result}
+                              {battle.result}
                             </span>
                           </td>
                         </tr>
