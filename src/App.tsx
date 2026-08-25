@@ -22,7 +22,8 @@ import {
   AlertCircle,
   Hash,
   Trophy,
-  Swords
+  Swords,
+  Clock
 } from 'lucide-react';
 import { getSocket } from './lib/socket';
 
@@ -1121,8 +1122,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
-                      {/* Point Difference Badge */}
+                    <div className="flex items-center">
+                      {/* Point Difference Badge & Leader */}
                       <div className="flex items-center gap-2.5 bg-zinc-900/80 px-3.5 py-2 rounded-lg border border-zinc-800 shadow-md">
                         <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
                         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
@@ -1141,18 +1142,67 @@ export default function App() {
                           </span>
                         )}
                       </div>
-
-                      {/* Remaining Time */}
-                      <div className="flex items-center gap-2.5 bg-zinc-900/80 px-3.5 py-2 rounded-lg border border-zinc-800 shadow-md">
-                        <span className="text-[11px] text-zinc-400 uppercase tracking-wider font-semibold">Tiempo:</span>
-                        <span className="text-base font-bold font-mono text-amber-400 animate-pulse">{formatBattleTime(activeBattle)}</span>
-                      </div>
                     </div>
                   </div>
 
+                  {/* Comparative progress bar with remaining time in the center */}
+                  {(() => {
+                    if (isFFA) {
+                      const total = activeBattle.users.reduce((sum, u) => sum + (u.score || 0), 0);
+                      const colors = ['bg-rose-500', 'bg-indigo-500', 'bg-amber-500', 'bg-emerald-500'];
+                      return (
+                        <div className="mt-4 bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/70">
+                          <div className="h-3 w-full bg-zinc-800/80 rounded-full overflow-hidden flex">
+                            {activeBattle.users.map((u, i) => {
+                              const pct = total > 0 ? (u.score / total) * 100 : 25;
+                              return (
+                                <div key={u.userId || i} className={`${colors[i % colors.length]} transition-all duration-500`} style={{ width: `${pct}%` }}></div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex flex-wrap justify-between items-center gap-2 mt-2 text-[10px] text-zinc-400 font-mono">
+                            <div className="flex flex-wrap gap-2">
+                              {activeBattle.users.map((u, i) => {
+                                const pct = total > 0 ? (u.score / total) * 100 : 25;
+                                return (
+                                  <span key={u.userId || i} className="font-semibold">@{u.displayId}: {pct.toFixed(1)}%</span>
+                                );
+                              })}
+                            </div>
+                            <div className="flex items-center gap-1.5 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/20 text-amber-300 font-mono text-[11px] font-bold">
+                              <Clock className="w-3 h-3 text-amber-400 animate-pulse" />
+                              <span>{formatBattleTime(activeBattle)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      const score1 = isTeamMatch ? team1Score : (activeBattle.users[0]?.score || 0);
+                      const score2 = isTeamMatch ? team2Score : (activeBattle.users[1]?.score || 0);
+                      const total = score1 + score2;
+                      const pct1 = total > 0 ? (score1 / total) * 100 : 50;
+                      return (
+                        <div className="mt-4 bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/70">
+                          <div className="h-3.5 w-full bg-zinc-800/80 rounded-full overflow-hidden flex shadow-inner">
+                            <div className="bg-gradient-to-r from-rose-500 to-pink-500 transition-all duration-500" style={{ width: `${pct1}%` }}></div>
+                            <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 flex-1 transition-all duration-500"></div>
+                          </div>
+                          <div className="flex justify-between items-center mt-2 text-[11px] text-zinc-400 font-mono">
+                            <span className="text-rose-400 font-semibold">{pct1.toFixed(1)}% {isTeamMatch ? 'Equipo Host' : 'Host'}</span>
+                            <div className="flex items-center gap-1.5 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/20 text-amber-300 font-mono text-xs font-bold shadow-sm">
+                              <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                              <span>{formatBattleTime(activeBattle)}</span>
+                            </div>
+                            <span className="text-indigo-400 font-semibold">{(100 - pct1).toFixed(1)}% {isTeamMatch ? 'Equipo Rival' : 'Rival'}</span>
+                          </div>
+                        </div>
+                      );
+                    }
+                  })()}
+
                   {/* Rendering for Team Match (2v2, 3v1, etc.) */}
                   {isTeamMatch && (
-                    <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
                       {/* Team 1 (Host's Team) */}
                       <div className="bg-rose-950/20 p-4 rounded-xl border border-rose-500/30 flex flex-col justify-between space-y-3">
                         <div>
@@ -1229,7 +1279,7 @@ export default function App() {
 
                   {/* Rendering for Free-For-All (1v1v1 / 1v1v1v1) */}
                   {isFFA && (
-                    <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                       {activeBattle.users.map((u, i) => {
                         const isLeader = (u.nickname || u.displayId) === leaderLabel;
                         return (
@@ -1262,7 +1312,7 @@ export default function App() {
 
                   {/* Rendering for 1v1 */}
                   {!isTeamMatch && !isFFA && (
-                    <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                       <div className="bg-rose-950/20 p-4 rounded-xl border border-rose-500/30 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center justify-center font-bold text-xs font-mono">
@@ -1306,54 +1356,6 @@ export default function App() {
                       </div>
                     </div>
                   )}
-
-                  {/* Comparative progress bar */}
-                  {(() => {
-                    if (isFFA) {
-                      const total = activeBattle.users.reduce((sum, u) => sum + (u.score || 0), 0);
-                      const colors = ['bg-rose-500', 'bg-indigo-500', 'bg-amber-500', 'bg-emerald-500'];
-                      return (
-                        <div className="mt-4">
-                          <div className="h-3 w-full bg-zinc-800/80 rounded-full overflow-hidden flex">
-                            {activeBattle.users.map((u, i) => {
-                              const pct = total > 0 ? (u.score / total) * 100 : 25;
-                              return (
-                                <div key={u.userId || i} className={`${colors[i % colors.length]} transition-all duration-500`} style={{ width: `${pct}%` }}></div>
-                              );
-                            })}
-                          </div>
-                          <div className="flex justify-between mt-1.5 text-[10px] text-zinc-400 font-mono">
-                            {activeBattle.users.map((u, i) => {
-                              const pct = total > 0 ? (u.score / total) * 100 : 25;
-                              return (
-                                <span key={u.userId || i}>@{u.displayId}: {pct.toFixed(1)}%</span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    } else {
-                      const score1 = isTeamMatch ? team1Score : (activeBattle.users[0]?.score || 0);
-                      const score2 = isTeamMatch ? team2Score : (activeBattle.users[1]?.score || 0);
-                      const total = score1 + score2;
-                      const pct1 = total > 0 ? (score1 / total) * 100 : 50;
-                      return (
-                        <div className="mt-4">
-                          <div className="h-3 w-full bg-zinc-800/80 rounded-full overflow-hidden flex">
-                            <div className="bg-gradient-to-r from-rose-500 to-pink-500 transition-all duration-500" style={{ width: `${pct1}%` }}></div>
-                            <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 flex-1 transition-all duration-500"></div>
-                          </div>
-                          <div className="flex justify-between items-center mt-2 text-[11px] text-zinc-400 font-mono">
-                            <span className="text-rose-400 font-semibold">{pct1.toFixed(1)}% {isTeamMatch ? 'Equipo Host' : 'Host'}</span>
-                            <span className="text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                              {isTie ? 'Empate (0 pts)' : `Diferencia: +${formatScore(pointDiff)} pts`}
-                            </span>
-                            <span className="text-indigo-400 font-semibold">{(100 - pct1).toFixed(1)}% {isTeamMatch ? 'Equipo Rival' : 'Rival'}</span>
-                          </div>
-                        </div>
-                      );
-                    }
-                  })()}
                 </div>
               );
             })()}
