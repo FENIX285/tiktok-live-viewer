@@ -95,12 +95,14 @@ interface BattleUser {
   teamId?: number;
 }
 
+type BattleResult = "In Progress" | "Victory" | "Defeat" | "Draw" | "Interrupted" | "En curso" | "Victoria" | "Derrota" | "Empate" | "Interrumpido";
+
 interface BattleHistory {
   battleId: string;
   startTime: number;
   type: string;
   users: BattleUser[];
-  result: "En curso" | "Victoria" | "Derrota" | "Empate" | "Interrumpido";
+  result: BattleResult;
   duration?: number;
   startTimeMs?: number;
 }
@@ -371,7 +373,7 @@ export default function App() {
 
         let type = existing?.type || '1v1';
         let users: BattleUser[] = existing ? existing.users.map(u => ({ ...u })) : [];
-        let result: 'En curso' | 'Victoria' | 'Derrota' | 'Empate' | 'Interrumpido' = existing ? existing.result : 'En curso';
+        let result: BattleResult = existing ? existing.result : 'In Progress';
 
         if (data.anchorInfo) {
           const anchors = Object.entries(data.anchorInfo);
@@ -429,30 +431,30 @@ export default function App() {
         );
 
         if (isCutShort) {
-             result = 'Interrumpido';
+             result = 'Interrupted';
         } else if (isFinished && users.length >= 2) {
-             if (apiHostResult === 0) result = 'Victoria';
-             else if (apiHostResult === 1) result = 'Derrota';
-             else if (apiHostResult === 2) result = 'Empate';
+             if (apiHostResult === 0) result = 'Victory';
+             else if (apiHostResult === 1) result = 'Defeat';
+             else if (apiHostResult === 2) result = 'Draw';
              else {
                const isTeamMatch = type === '2v2' || type === '3v1' || type === '1v3' || (type.includes('v') && type !== '1v1' && type !== '1v1v1' && type !== '1v1v1v1');
                if (isTeamMatch) {
                  const t1 = users.filter(u => u.teamId === 0).reduce((s, u) => s + (u.score || 0), 0);
                  const t2 = users.filter(u => u.teamId === 1).reduce((s, u) => s + (u.score || 0), 0);
-                 if (t1 > t2) result = 'Victoria';
-                 else if (t1 < t2) result = 'Derrota';
-                 else result = 'Empate';
+                 if (t1 > t2) result = 'Victory';
+                 else if (t1 < t2) result = 'Defeat';
+                 else result = 'Draw';
                } else {
                  const host = users[0];
                  const others = users.slice(1);
                  const maxOtherScore = Math.max(...others.map(o => o.score || 0));
-                 if (host.score > maxOtherScore) result = 'Victoria';
-                 else if (host.score < maxOtherScore) result = 'Derrota';
-                 else result = 'Empate';
+                 if (host.score > maxOtherScore) result = 'Victory';
+                 else if (host.score < maxOtherScore) result = 'Defeat';
+                 else result = 'Draw';
                }
              }
-        } else if (result !== 'Victoria' && result !== 'Derrota' && result !== 'Empate' && result !== 'Interrumpido') {
-             result = 'En curso';
+        } else if (result !== 'Victory' && result !== 'Defeat' && result !== 'Draw' && result !== 'Interrupted' && result !== 'Victoria' && result !== 'Derrota' && result !== 'Empate' && result !== 'Interrumpido') {
+             result = 'In Progress';
         }
 
         const inputDuration = data.battleSetting?.duration;
@@ -611,25 +613,25 @@ export default function App() {
 
         if (updatedUsers.length >= 2) {
            if (data.battleStatus === 2) {
-             if (result !== 'Interrumpido') {
+             if (result !== 'Interrupted' && result !== 'Interrumpido') {
                const isTeamMatch = type === '2v2' || type === '3v1' || type === '1v3' || (type.includes('v') && type !== '1v1' && type !== '1v1v1' && type !== '1v1v1v1');
                if (isTeamMatch) {
                  const t1 = updatedUsers.filter(u => u.teamId === 0).reduce((s, u) => s + (u.score || 0), 0);
                  const t2 = updatedUsers.filter(u => u.teamId === 1).reduce((s, u) => s + (u.score || 0), 0);
-                 if (t1 > t2) result = 'Victoria';
-                 else if (t1 < t2) result = 'Derrota';
-                 else result = 'Empate';
+                 if (t1 > t2) result = 'Victory';
+                 else if (t1 < t2) result = 'Defeat';
+                 else result = 'Draw';
                } else {
                  const host = updatedUsers[0];
                  const others = updatedUsers.slice(1);
                  const maxOtherScore = Math.max(...others.map(o => o.score || 0));
-                 if (host.score > maxOtherScore) result = 'Victoria';
-                 else if (host.score < maxOtherScore) result = 'Derrota';
-                 else result = 'Empate';
+                 if (host.score > maxOtherScore) result = 'Victory';
+                 else if (host.score < maxOtherScore) result = 'Defeat';
+                 else result = 'Draw';
                }
              }
-           } else if (result !== 'Victoria' && result !== 'Derrota' && result !== 'Empate' && result !== 'Interrumpido') {
-             result = 'En curso';
+           } else if (result !== 'Victory' && result !== 'Defeat' && result !== 'Draw' && result !== 'Interrupted' && result !== 'Victoria' && result !== 'Derrota' && result !== 'Empate' && result !== 'Interrumpido') {
+             result = 'In Progress';
            }
         }
 
@@ -844,17 +846,21 @@ export default function App() {
         {/* Stats Grid */}
         <section className="grid grid-cols-2 gap-4">
           <div className="border border-zinc-800 bg-zinc-900/50 rounded-xl p-5 space-y-2 backdrop-blur-md shadow-lg">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 block">Espectadores</span>
             <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Viewers</span>
+              <Users className="w-4 h-4 text-indigo-400" />
+            </div>
+            <div>
               <span className="text-3xl font-bold tracking-tight text-zinc-100">{viewerCount.toLocaleString()}</span>
-              <Users className="w-5 h-5 text-indigo-400" />
             </div>
           </div>
           <div className="border border-zinc-800 bg-zinc-900/50 rounded-xl p-5 space-y-2 backdrop-blur-md shadow-lg">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 block">Likes Totales</span>
             <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Total Likes</span>
+              <Heart className="w-4 h-4 text-rose-500" />
+            </div>
+            <div>
               <span className="text-3xl font-bold tracking-tight text-zinc-100">{stats.likes.toLocaleString()}</span>
-              <Heart className="w-5 h-5 text-rose-500" />
             </div>
           </div>
         </section>
@@ -868,9 +874,9 @@ export default function App() {
             <div className="flex flex-col h-full space-y-3">
               <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 shrink-0">
                 <span className="text-sm font-semibold tracking-tight text-zinc-100 flex items-center gap-2">
-                  <Users className="w-4 h-4 text-indigo-400" /> Top Espectadores
+                  <Users className="w-4 h-4 text-indigo-400" /> Top Viewers
                 </span>
-                <span className="text-[10px] font-medium tracking-wider text-emerald-400 uppercase bg-emerald-400/10 px-2 py-0.5 rounded-full">En vivo</span>
+                <span className="text-[10px] font-medium tracking-wider text-emerald-400 uppercase bg-emerald-400/10 px-2 py-0.5 rounded-full">Live</span>
               </div>
               
               <div className="space-y-2 overflow-y-auto pr-2 flex-1 relative custom-scrollbar">
@@ -987,7 +993,6 @@ export default function App() {
                 <span className="text-sm font-semibold tracking-tight text-zinc-100 flex items-center gap-2">
                   <Heart className="w-4 h-4 text-rose-500" /> Top Tappers
                 </span>
-                <span className="text-[10px] font-medium tracking-wider text-indigo-400 uppercase bg-indigo-400/10 px-2 py-0.5 rounded-full">Aggregator</span>
               </div>
               
               <div className="space-y-2 overflow-y-auto pr-2 flex-1 relative custom-scrollbar">
@@ -1058,7 +1063,7 @@ export default function App() {
             </div>
 
             {(() => {
-              const activeBattle = battles.find(b => b.result === 'En curso');
+              const activeBattle = battles.find(b => b.result === 'In Progress' || b.result === 'En curso');
               if (!activeBattle) return null;
 
               const type = activeBattle.type;
@@ -1083,8 +1088,8 @@ export default function App() {
 
               if (isTeamMatch) {
                 pointDiff = Math.abs(team1Score - team2Score);
-                if (team1Score > team2Score) leaderLabel = 'Equipo Host';
-                else if (team2Score > team1Score) leaderLabel = 'Equipo Rival';
+                if (team1Score > team2Score) leaderLabel = 'Host Team';
+                else if (team2Score > team1Score) leaderLabel = 'Rival Team';
                 else isTie = true;
               } else if (isFFA) {
                 const sortedByScore = [...activeBattle.users].sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -1093,7 +1098,7 @@ export default function App() {
                 const score1 = top1?.score || 0;
                 const score2 = top2?.score || 0;
                 pointDiff = score1 - score2;
-                if (score1 > score2) leaderLabel = top1?.nickname || top1?.displayId || 'Líder';
+                if (score1 > score2) leaderLabel = top1?.nickname || top1?.displayId || 'Leader';
                 else isTie = true;
               } else {
                 const score1 = activeBattle.users[0]?.score || 0;
@@ -1117,7 +1122,7 @@ export default function App() {
                           Battle in Progress <span className="text-xs bg-rose-500/20 text-rose-300 font-mono px-2 py-0.5 rounded border border-rose-500/30">{type}</span>
                         </h4>
                         <p className="text-xs text-zinc-400">
-                          {isTeamMatch ? 'Batalla por equipos sincronizada en tiempo real' : isFFA ? `Todos contra todos (${type})` : 'Batalla 1 vs 1 en tiempo real'}
+                          {isTeamMatch ? 'Real-time synchronized team battle' : isFFA ? `Free-for-all battle (${type})` : '1 vs 1 real-time battle'}
                         </p>
                       </div>
                     </div>
@@ -1127,18 +1132,18 @@ export default function App() {
                       <div className="flex items-center gap-2.5 bg-zinc-900/80 px-3.5 py-2 rounded-lg border border-zinc-800 shadow-md">
                         <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
                         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                          <span className="text-[11px] text-zinc-400 uppercase tracking-wider font-semibold">Diferencia:</span>
+                          <span className="text-[11px] text-zinc-400 uppercase tracking-wider font-semibold">Difference:</span>
                           <span className="text-base font-black font-mono text-emerald-400">
                             +{formatScore(pointDiff)} <span className="text-xs font-normal text-emerald-400/80">pts</span>
                           </span>
                         </div>
                         {!isTie ? (
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 truncate max-w-[150px]" title={`${leaderLabel} va ganando`}>
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 truncate max-w-[150px]" title={`${leaderLabel} is leading`}>
                             👑 {leaderLabel}
                           </span>
                         ) : (
                           <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                            ⚖️ Empate
+                            ⚖️ Tie
                           </span>
                         )}
                       </div>
@@ -1188,12 +1193,12 @@ export default function App() {
                             <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 flex-1 transition-all duration-500"></div>
                           </div>
                           <div className="flex justify-between items-center mt-2 text-[11px] text-zinc-400 font-mono">
-                            <span className="text-rose-400 font-semibold">{pct1.toFixed(1)}% {isTeamMatch ? 'Equipo Host' : 'Host'}</span>
+                            <span className="text-rose-400 font-semibold">{pct1.toFixed(1)}% {isTeamMatch ? 'Host Team' : 'Host'}</span>
                             <div className="flex items-center gap-1.5 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/20 text-amber-300 font-mono text-xs font-bold shadow-sm">
                               <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
                               <span>{formatBattleTime(activeBattle)}</span>
                             </div>
-                            <span className="text-indigo-400 font-semibold">{(100 - pct1).toFixed(1)}% {isTeamMatch ? 'Equipo Rival' : 'Rival'}</span>
+                            <span className="text-indigo-400 font-semibold">{(100 - pct1).toFixed(1)}% {isTeamMatch ? 'Rival Team' : 'Rival'}</span>
                           </div>
                         </div>
                       );
@@ -1210,7 +1215,7 @@ export default function App() {
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold font-mono text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
                                 <span className="w-2 h-2 rounded-full bg-rose-400"></span>
-                                Equipo Host (Tú)
+                                Host Team (You)
                               </span>
                               {team1Score > team2Score && (
                                 <span className="text-[10px] font-bold font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
@@ -1246,7 +1251,7 @@ export default function App() {
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold font-mono text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
                                 <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
-                                Equipo Rival
+                                Rival Team
                               </span>
                               {team2Score > team1Score && (
                                 <span className="text-[10px] font-bold font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
@@ -1301,7 +1306,7 @@ export default function App() {
                               )}
                             </div>
                             <div className="pt-2 border-t border-zinc-800/50 flex justify-between items-center">
-                              <span className="text-[10px] font-mono uppercase text-zinc-500">{i === 0 ? 'Host' : `Jugador ${i+1}`}</span>
+                              <span className="text-[10px] font-mono uppercase text-zinc-500">{i === 0 ? 'Host' : `Player ${i+1}`}</span>
                               <span className={`text-lg font-black font-mono ${i === 0 ? 'text-rose-400' : 'text-indigo-400'}`}>{formatScore(u.score)}</span>
                             </div>
                           </div>
@@ -1320,7 +1325,7 @@ export default function App() {
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-zinc-500 block uppercase font-mono tracking-wider">Host (Tú)</span>
+                              <span className="text-[10px] text-zinc-500 block uppercase font-mono tracking-wider">Host (You)</span>
                               {(activeBattle.users[0]?.score || 0) > (activeBattle.users[1]?.score || 0) && (
                                 <span className="text-[10px] font-bold font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
                                   +{formatScore(pointDiff)} pts
@@ -1391,10 +1396,19 @@ export default function App() {
                       return (
                         <tr key={battle.battleId} className="bg-zinc-900/20 hover:bg-zinc-800/30 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap text-zinc-300 font-mono text-xs">
-                            {new Intl.DateTimeFormat('en-US', {
-                              month: 'short', day: 'numeric', year: 'numeric',
-                              hour: 'numeric', minute: '2-digit', hour12: true
-                            }).format(new Date(battle.startTime))}
+                            <div className="flex flex-col items-center sm:block sm:text-left">
+                              <span>
+                                {new Intl.DateTimeFormat('en-US', {
+                                  month: 'short', day: 'numeric', year: 'numeric'
+                                }).format(new Date(battle.startTime))}
+                              </span>
+                              <span className="hidden sm:inline">, </span>
+                              <span className="text-center sm:text-left sm:inline">
+                                {new Intl.DateTimeFormat('en-US', {
+                                  hour: 'numeric', minute: '2-digit', hour12: true
+                                }).format(new Date(battle.startTime))}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className="px-2.5 py-1 rounded-md bg-zinc-800 text-indigo-300 border border-zinc-700 text-xs font-mono font-bold">
@@ -1405,7 +1419,7 @@ export default function App() {
                             {isTeamMatch ? (
                               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                                 <div className="bg-rose-950/40 p-2 rounded border border-rose-500/30 flex flex-col">
-                                  <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider">Equipo Host</span>
+                                  <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider">Host Team</span>
                                   <div className="flex flex-wrap gap-1.5 mt-1">
                                     {team1.map(u => (
                                       <span key={u.userId} className="text-xs font-semibold text-rose-200">
@@ -1418,7 +1432,7 @@ export default function App() {
                                 <span className="text-xs font-bold text-zinc-500 px-1">VS</span>
 
                                 <div className="bg-indigo-950/40 p-2 rounded border border-indigo-500/30 flex flex-col">
-                                  <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Equipo Rival</span>
+                                  <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Rival Team</span>
                                   <div className="flex flex-wrap gap-1.5 mt-1">
                                     {team2.map(u => (
                                       <span key={u.userId} className="text-xs font-semibold text-indigo-200">
@@ -1481,14 +1495,30 @@ export default function App() {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider
-                              ${battle.result === 'Victoria' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
-                                battle.result === 'Derrota' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 
-                                battle.result === 'Empate' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 
-                                battle.result === 'Interrumpido' ? 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20' :
-                                'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 animate-pulse'}`}>
-                              {battle.result}
-                            </span>
+                            {(() => {
+                              const res = battle.result;
+                              const isVictory = res === 'Victory' || res === 'Victoria';
+                              const isDefeat = res === 'Defeat' || res === 'Derrota';
+                              const isDraw = res === 'Draw' || res === 'Empate';
+                              const isInterrupted = res === 'Interrupted' || res === 'Interrumpido';
+
+                              const label = isVictory ? 'Victory' : isDefeat ? 'Defeat' : isDraw ? 'Draw' : isInterrupted ? 'Interrupted' : 'In Progress';
+                              const style = isVictory 
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                : isDefeat 
+                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' 
+                                : isDraw 
+                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
+                                : isInterrupted 
+                                ? 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20' 
+                                : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 animate-pulse';
+
+                              return (
+                                <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${style}`}>
+                                  {label}
+                                </span>
+                              );
+                            })()}
                           </td>
                         </tr>
                       );
@@ -1514,17 +1544,17 @@ export default function App() {
                   disabled={battlePage === 1}
                   className="px-3 py-1 bg-zinc-800 text-zinc-300 rounded text-sm hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  Anterior
+                  Previous
                 </button>
                 <span className="text-zinc-400 text-sm">
-                  Página {battlePage} de {totalBattlePages}
+                  Page {battlePage} of {totalBattlePages}
                 </span>
                 <button 
                   onClick={() => setBattlePage(p => Math.min(totalBattlePages, p + 1))}
                   disabled={battlePage === totalBattlePages}
                   className="px-3 py-1 bg-zinc-800 text-zinc-300 rounded text-sm hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  Siguiente
+                  Next
                 </button>
               </div>
             )}
