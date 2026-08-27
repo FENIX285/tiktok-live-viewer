@@ -1150,34 +1150,42 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Comparative progress bar with remaining time in the center */}
+                  {/* Comparative progress bar with embedded percentages only, and clean bottom layout */}
                   {(() => {
                     if (isFFA) {
                       const total = activeBattle.users.reduce((sum, u) => sum + (u.score || 0), 0);
-                      const colors = ['bg-rose-500', 'bg-indigo-500', 'bg-amber-500', 'bg-emerald-500'];
+                      const colors = [
+                        'bg-gradient-to-r from-rose-500 to-pink-500', 
+                        'bg-gradient-to-r from-indigo-500 to-indigo-600', 
+                        'bg-gradient-to-r from-amber-500 to-amber-600', 
+                        'bg-gradient-to-r from-emerald-500 to-emerald-600'
+                      ];
                       return (
-                        <div className="mt-4 bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/70">
-                          <div className="h-3 w-full bg-zinc-800/80 rounded-full overflow-hidden flex">
+                        <div className="mt-4 bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/70 space-y-2">
+                          <div className="h-5 w-full bg-zinc-800/90 rounded-md overflow-hidden flex shadow-inner">
                             {activeBattle.users.map((u, i) => {
                               const pct = total > 0 ? (u.score / total) * 100 : 25;
                               return (
-                                <div key={u.userId || i} className={`${colors[i % colors.length]} transition-all duration-500`} style={{ width: `${pct}%` }}></div>
+                                <div 
+                                  key={u.userId || i} 
+                                  className={`${colors[i % colors.length]} h-full flex items-center justify-center px-1 text-white font-mono font-bold text-[11px] whitespace-nowrap overflow-hidden transition-all duration-500`} 
+                                  style={{ width: `${pct}%` }}
+                                  title={`@${u.displayId}: ${pct.toFixed(1)}%`}
+                                >
+                                  {pct >= 8 ? (
+                                    <span className="drop-shadow-sm leading-none">{pct.toFixed(1)}%</span>
+                                  ) : null}
+                                </div>
                               );
                             })}
                           </div>
-                          <div className="flex flex-wrap justify-between items-center gap-2 mt-2 text-[10px] text-zinc-400 font-mono">
-                            <div className="flex flex-wrap gap-2">
-                              {activeBattle.users.map((u, i) => {
-                                const pct = total > 0 ? (u.score / total) * 100 : 25;
-                                return (
-                                  <span key={u.userId || i} className="font-semibold">@{u.displayId}: {pct.toFixed(1)}%</span>
-                                );
-                              })}
-                            </div>
-                            <div className="flex items-center gap-1.5 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/20 text-amber-300 font-mono text-[11px] font-bold">
-                              <Clock className="w-3 h-3 text-amber-400 animate-pulse" />
+                          <div className="flex justify-between items-center text-xs font-mono">
+                            <span className="text-rose-400 font-bold">Host</span>
+                            <div className="flex items-center gap-1.5 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/20 text-amber-300 font-mono text-xs font-bold shadow-sm">
+                              <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
                               <span>{formatBattleTime(activeBattle)}</span>
                             </div>
+                            <span className="text-indigo-400 font-bold">Rivals</span>
                           </div>
                         </div>
                       );
@@ -1186,19 +1194,41 @@ export default function App() {
                       const score2 = isTeamMatch ? team2Score : (activeBattle.users[1]?.score || 0);
                       const total = score1 + score2;
                       const pct1 = total > 0 ? (score1 / total) * 100 : 50;
+                      const pct2 = 100 - pct1;
+
                       return (
-                        <div className="mt-4 bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/70">
-                          <div className="h-3.5 w-full bg-zinc-800/80 rounded-full overflow-hidden flex shadow-inner">
-                            <div className="bg-gradient-to-r from-rose-500 to-pink-500 transition-all duration-500" style={{ width: `${pct1}%` }}></div>
-                            <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 flex-1 transition-all duration-500"></div>
+                        <div className="mt-4 bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/70 space-y-2">
+                          <div className="h-5 w-full bg-zinc-800/90 rounded-md overflow-hidden flex shadow-inner">
+                            {/* Host Team / Host Segment */}
+                            <div 
+                              className="bg-gradient-to-r from-rose-500 to-pink-500 h-full flex items-center justify-center px-1.5 text-white font-mono font-bold text-[11px] whitespace-nowrap overflow-hidden transition-all duration-500" 
+                              style={{ width: `${pct1}%` }}
+                              title={`${isTeamMatch ? 'Host Team' : 'Host'}: ${pct1.toFixed(1)}%`}
+                            >
+                              {pct1 >= 8 ? (
+                                <span className="drop-shadow-sm leading-none">{pct1.toFixed(1)}%</span>
+                              ) : null}
+                            </div>
+
+                            {/* Rival Team / Rival Segment */}
+                            <div 
+                              className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full flex items-center justify-center px-1.5 text-white font-mono font-bold text-[11px] whitespace-nowrap overflow-hidden flex-1 transition-all duration-500"
+                              title={`${isTeamMatch ? 'Rival Team' : 'Rival'}: ${pct2.toFixed(1)}%`}
+                            >
+                              {pct2 >= 8 ? (
+                                <span className="drop-shadow-sm leading-none">{pct2.toFixed(1)}%</span>
+                              ) : null}
+                            </div>
                           </div>
-                          <div className="flex justify-between items-center mt-2 text-[11px] text-zinc-400 font-mono">
-                            <span className="text-rose-400 font-semibold">{pct1.toFixed(1)}% {isTeamMatch ? 'Host Team' : 'Host'}</span>
+
+                          {/* Bottom Row: Host Team on left, Animated remaining time in center, Rival Team on right */}
+                          <div className="flex justify-between items-center text-xs font-mono">
+                            <span className="text-rose-400 font-bold tracking-wide">{isTeamMatch ? 'Host Team' : 'Host'}</span>
                             <div className="flex items-center gap-1.5 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/20 text-amber-300 font-mono text-xs font-bold shadow-sm">
                               <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
                               <span>{formatBattleTime(activeBattle)}</span>
                             </div>
-                            <span className="text-indigo-400 font-semibold">{(100 - pct1).toFixed(1)}% {isTeamMatch ? 'Rival Team' : 'Rival'}</span>
+                            <span className="text-indigo-400 font-bold tracking-wide">{isTeamMatch ? 'Rival Team' : 'Rival'}</span>
                           </div>
                         </div>
                       );
