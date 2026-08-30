@@ -1423,6 +1423,15 @@ export default function App() {
                       const team1Score = team1.reduce((sum, u) => sum + (u.score || 0), 0);
                       const team2Score = team2.reduce((sum, u) => sum + (u.score || 0), 0);
 
+                      // Calculate top 2 highest scores among all participants in this battle
+                      const sortedScores = [...battle.users.map(u => u.score || 0)].sort((a, b) => b - a);
+                      const topScores = sortedScores.filter(s => s > 0).slice(0, 2);
+
+                      const isTop2Score = (score?: number) => {
+                        if (!score || score <= 0) return false;
+                        return topScores.includes(score);
+                      };
+
                       return (
                         <tr key={battle.battleId} className="bg-zinc-900/20 hover:bg-zinc-800/30 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap text-zinc-300 font-mono text-xs">
@@ -1447,80 +1456,149 @@ export default function App() {
                           </td>
                           <td className="px-6 py-4">
                             {isTeamMatch ? (
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                                <div className="bg-rose-950/40 p-2 rounded border border-rose-500/30 flex flex-col">
-                                  <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider">Host Team</span>
-                                  <div className="flex flex-wrap gap-1.5 mt-1">
-                                    {team1.map(u => (
-                                      <span key={u.userId} className="text-xs font-semibold text-rose-200">
-                                        {u.nickname || u.displayId} <span className="text-rose-400/80 text-[10px]">(@{u.displayId})</span>
-                                      </span>
-                                    ))}
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5">
+                                <div className="w-fit inline-flex flex-col bg-rose-950/40 p-2.5 rounded-lg border border-rose-500/30">
+                                  <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider mb-1">Host Team</span>
+                                  <div className="flex flex-col gap-1.5 w-full">
+                                    {team1.map(u => {
+                                      const isTop = isTop2Score(u.score);
+                                      return (
+                                        <div key={u.userId} className="w-full flex items-center justify-between gap-3 bg-rose-900/30 px-2.5 py-1 rounded-md border border-rose-500/20">
+                                          <div className="flex flex-col text-left">
+                                            <span className="text-xs font-semibold text-rose-200 leading-tight">
+                                              {u.nickname || u.displayId}
+                                            </span>
+                                            <span className="text-rose-400/80 text-[10px] font-mono leading-tight">
+                                              @{u.displayId}
+                                            </span>
+                                          </div>
+                                          <span className={`font-mono text-xs px-2 py-0.5 rounded-md font-bold whitespace-nowrap ml-2 ${
+                                            isTop 
+                                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-xs' 
+                                              : 'text-rose-300 bg-rose-500/10'
+                                          }`}>
+                                            {formatScore(u.score)}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
 
-                                <span className="text-xs font-bold text-zinc-500 px-1">VS</span>
+                                <span className="text-xs font-bold text-zinc-500 px-1 self-center">VS</span>
 
-                                <div className="bg-indigo-950/40 p-2 rounded border border-indigo-500/30 flex flex-col">
-                                  <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Rival Team</span>
-                                  <div className="flex flex-wrap gap-1.5 mt-1">
-                                    {team2.map(u => (
-                                      <span key={u.userId} className="text-xs font-semibold text-indigo-200">
-                                        {u.nickname || u.displayId} <span className="text-indigo-400/80 text-[10px]">(@{u.displayId})</span>
-                                      </span>
-                                    ))}
+                                <div className="w-fit inline-flex flex-col bg-indigo-950/40 p-2.5 rounded-lg border border-indigo-500/30">
+                                  <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-1">Rival Team</span>
+                                  <div className="flex flex-col gap-1.5 w-full">
+                                    {team2.map(u => {
+                                      const isTop = isTop2Score(u.score);
+                                      return (
+                                        <div key={u.userId} className="w-full flex items-center justify-between gap-3 bg-indigo-900/30 px-2.5 py-1 rounded-md border border-indigo-500/20">
+                                          <div className="flex flex-col text-left">
+                                            <span className="text-xs font-semibold text-indigo-200 leading-tight">
+                                              {u.nickname || u.displayId}
+                                            </span>
+                                            <span className="text-indigo-400/80 text-[10px] font-mono leading-tight">
+                                              @{u.displayId}
+                                            </span>
+                                          </div>
+                                          <span className={`font-mono text-xs px-2 py-0.5 rounded-md font-bold whitespace-nowrap ml-2 ${
+                                            isTop 
+                                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-xs' 
+                                              : 'text-indigo-300 bg-indigo-500/10'
+                                          }`}>
+                                            {formatScore(u.score)}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               </div>
                             ) : isFFA ? (
-                              <div className="flex flex-wrap items-center gap-1.5">
+                              <div className="flex flex-wrap items-center gap-2">
                                 {battle.users.map((u, i) => (
                                   <React.Fragment key={u.userId || i}>
-                                    <div className={`flex flex-col px-2 py-1 rounded border ${i === 0 ? 'bg-rose-950/40 border-rose-500/40 text-rose-300' : 'bg-zinc-800/40 border-zinc-700/40 text-zinc-200'}`}>
-                                      <span className="text-xs font-bold">{u.nickname || u.displayId}</span>
-                                      <span className="text-[10px] text-zinc-400">@{u.displayId}</span>
+                                    <div className={`flex flex-col px-2.5 py-1 rounded-md border ${
+                                      i === 0 
+                                        ? 'bg-rose-950/40 border-rose-500/30' 
+                                        : 'bg-indigo-950/40 border-indigo-500/30'
+                                    }`}>
+                                      <span className={`text-xs font-semibold leading-tight ${
+                                        i === 0 ? 'text-rose-200' : 'text-indigo-200'
+                                      }`}>
+                                        {u.nickname || u.displayId}
+                                      </span>
+                                      <span className={`text-[10px] font-mono leading-tight ${
+                                        i === 0 ? 'text-rose-400/80' : 'text-indigo-400/80'
+                                      }`}>
+                                        @{u.displayId}
+                                      </span>
                                     </div>
                                     {i < battle.users.length - 1 && <span className="text-zinc-500 text-xs font-bold">vs</span>}
                                   </React.Fragment>
                                 ))}
                               </div>
                             ) : (
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 {battle.users.map((u, i) => (
-                                  <div key={u.userId || i} className={`flex flex-col bg-zinc-800/50 px-2.5 py-1.5 rounded border ${i === 0 ? 'border-rose-500/50' : 'border-zinc-700/50'}`}>
-                                    <span className={`text-sm font-bold ${i === 0 ? 'text-rose-300' : 'text-zinc-200'}`}>
-                                      {u.nickname || u.displayId}
-                                    </span>
-                                    <span className="text-xs text-zinc-400">
-                                      @{u.displayId}
-                                    </span>
-                                  </div>
+                                  <React.Fragment key={u.userId || i}>
+                                    <div className={`flex flex-col px-2.5 py-1 rounded-md border ${
+                                      i === 0 
+                                        ? 'bg-rose-950/40 border-rose-500/30' 
+                                        : 'bg-indigo-950/40 border-indigo-500/30'
+                                    }`}>
+                                      <span className={`text-xs font-semibold leading-tight ${
+                                        i === 0 ? 'text-rose-200' : 'text-indigo-200'
+                                      }`}>
+                                        {u.nickname || u.displayId}
+                                      </span>
+                                      <span className={`text-[10px] font-mono leading-tight ${
+                                        i === 0 ? 'text-rose-400/80' : 'text-indigo-400/80'
+                                      }`}>
+                                        @{u.displayId}
+                                      </span>
+                                    </div>
+                                    {i === 0 && battle.users.length > 1 && (
+                                      <span className="text-xs font-bold text-zinc-500 px-0.5">VS</span>
+                                    )}
+                                  </React.Fragment>
                                 ))}
                               </div>
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-center">
                             {isTeamMatch ? (
-                              <div className="flex flex-col items-center justify-center font-mono">
-                                <div className="flex items-center gap-2 text-sm font-bold">
-                                  <span className="text-rose-300">{formatScore(team1Score)}</span>
-                                  <span className="text-zinc-500 text-xs">vs</span>
-                                  <span className="text-indigo-400">{formatScore(team2Score)}</span>
-                                </div>
-                                <div className="text-[10px] text-zinc-500">
-                                  ({team1.map(u => formatScore(u.score)).join(' + ')}) vs ({team2.map(u => formatScore(u.score)).join(' + ')})
-                                </div>
+                              <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 font-mono text-sm font-bold">
+                                <span className="text-rose-400">{formatScore(team1Score)}</span>
+                                <span className="text-zinc-400 font-mono font-bold text-xs">vs</span>
+                                <span className="text-indigo-400">{formatScore(team2Score)}</span>
+                              </div>
+                            ) : isFFA ? (
+                              <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5 font-mono text-xs">
+                                {battle.users.map((u, i) => {
+                                  const isTop = battle.users.length > 2 && isTop2Score(u.score);
+                                  return (
+                                    <React.Fragment key={u.userId || i}>
+                                      {i > 0 && <span className="text-zinc-400 font-mono font-bold text-xs">vs</span>}
+                                      <span className={`px-2 py-0.5 rounded-md font-bold ${
+                                        isTop 
+                                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-xs' 
+                                          : i === 0 
+                                            ? 'text-rose-400' 
+                                            : 'text-indigo-400'
+                                      }`}>
+                                        {formatScore(u.score || 0)}
+                                      </span>
+                                    </React.Fragment>
+                                  );
+                                })}
                               </div>
                             ) : (
-                              <div className="flex flex-wrap items-center justify-center gap-2 font-mono text-xs">
-                                {battle.users.map((u, i) => (
-                                   <React.Fragment key={u.userId || i}>
-                                     <span className={i === 0 ? "text-rose-400 font-bold" : "text-indigo-400 font-bold"}>
-                                       {formatScore(u.score)}
-                                     </span>
-                                     {i < battle.users.length - 1 && <span className="text-zinc-500 text-[10px]">vs</span>}
-                                   </React.Fragment>
-                                ))}
+                              <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 font-mono text-sm font-bold">
+                                <span className="text-rose-400">{formatScore(battle.users[0]?.score || 0)}</span>
+                                <span className="text-zinc-400 font-mono font-bold text-xs">vs</span>
+                                <span className="text-indigo-400">{formatScore(battle.users[1]?.score || 0)}</span>
                               </div>
                             )}
                           </td>
