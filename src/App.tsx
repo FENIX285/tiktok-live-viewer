@@ -199,8 +199,8 @@ function processTeamGroupingAndSort(
         type = '2v2';
       } else if (hostTeamIds.length > 0 && rivalTeamIds.length > 0) {
         type = `${hostTeamIds.length}v${rivalTeamIds.length}`;
-      } else if (users.length === 4 && type !== '3v1' && type !== '1v3') {
-        type = '2v2';
+      } else if (users.length === 4 && (currentType === '2v2' || currentType === '3v1' || currentType === '1v3')) {
+        type = currentType;
       }
 
       if (hostTeamIds.length > 0 && rivalTeamIds.length > 0 && (isHostInT1 || isHostInT2)) {
@@ -227,13 +227,10 @@ function processTeamGroupingAndSort(
     const hostIdx = users.indexOf(hostUser);
     if (users.length === 4) {
       if (type === '3v1') {
-        users.forEach((u) => { u.teamId = u === hostUser ? 0 : 0; });
+        users.forEach((u) => { u.teamId = u === hostUser ? 0 : 1; });
       } else if (type === '1v3') {
         users.forEach((u) => { u.teamId = u === hostUser ? 0 : 1; });
-      } else if (type === '1v1v1v1') {
-        users.forEach((u, i) => { u.teamId = i; });
-      } else {
-        type = '2v2';
+      } else if (type === '2v2') {
         if (hostIdx === 2 || hostIdx === 3) {
           users[2].teamId = 0; users[3].teamId = 0;
           users[0].teamId = 1; users[1].teamId = 1;
@@ -241,6 +238,10 @@ function processTeamGroupingAndSort(
           users[0].teamId = 0; users[1].teamId = 0;
           users[2].teamId = 1; users[3].teamId = 1;
         }
+      } else {
+        // Default 4 individual participants to FFA (1v1v1v1)
+        type = '1v1v1v1';
+        users.forEach((u, i) => { u.teamId = i; });
       }
     } else if (users.length === 3 && type !== '3v1' && type !== '1v3') {
       type = '1v1v1';
@@ -253,7 +254,17 @@ function processTeamGroupingAndSort(
   }
 
   if (hostUser) {
-    hostUser.teamId = 0;
+    if (type === '1v1v1' || type === '1v1v1v1') {
+      hostUser.teamId = 0;
+      let nextTeam = 1;
+      users.forEach(u => {
+        if (u !== hostUser) {
+          u.teamId = nextTeam++;
+        }
+      });
+    } else {
+      hostUser.teamId = 0;
+    }
   }
 
   users.sort((a, b) => {
@@ -375,10 +386,29 @@ export default function App() {
         let users: BattleUser[] = existing ? existing.users.map(u => ({ ...u })) : [];
         let result: BattleResult = existing ? existing.result : 'In Progress';
 
+        const teamSource = data.teamArmies || data.team_armies || data.teams || data.battleGroups || data.battleTeams || [];
+        const isExplicitTeamMode = (
+          (Array.isArray(teamSource) && teamSource.length === 2) ||
+          data.battleSetting?.battleType === 2 ||
+          data.battleType === 2 ||
+          data.battleMode === 'team' ||
+          data.battleMode === 2
+        );
+
         if (data.anchorInfo) {
           const anchors = Object.entries(data.anchorInfo);
           if (anchors.length > 2) {
-            type = anchors.length === 4 ? '2v2' : anchors.length === 3 ? '1v1v1' : `${anchors.length}vHosts`;
+            if (anchors.length === 4) {
+              type = (existing?.type === '2v2' || existing?.type === '3v1' || existing?.type === '1v3' || isExplicitTeamMode)
+                ? (existing?.type || '2v2')
+                : '1v1v1v1';
+            } else if (anchors.length === 3) {
+              type = (existing?.type === '2v1' || existing?.type === '1v2' || isExplicitTeamMode)
+                ? (existing?.type || '2v1')
+                : '1v1v1';
+            } else {
+              type = `${anchors.length}vHosts`;
+            }
           }
           
           users = anchors.map(([key, a]: [string, any]) => {
@@ -403,7 +433,6 @@ export default function App() {
         }
 
         // Process team grouping and scores
-        const teamSource = data.teamArmies || data.team_armies || data.teams || data.battleGroups || data.battleTeams || [];
         const { type: groupedType, sortedUsers } = processTeamGroupingAndSort(users, teamSource, targetHost, targetHostId, type);
         type = groupedType;
         users = sortedUsers;
@@ -1164,7 +1193,8 @@ export default function App() {
                         <div className="mt-4 bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/70 space-y-2">
                           <div className="h-5 w-full bg-zinc-800/90 rounded-md overflow-hidden flex shadow-inner">
                             {activeBattle.users.map((u, i) => {
-                              const pct = total > 0 ? (u.score / total) * 100 : 25;
+                              const defaultPct = activeBattle.users.length > 0 ? 100 / activeBattle.users.length : 25;
+                              const pct = total > 0 ? (u.score / total) * 100 : defaultPct;
                               return (
                                 <div 
                                   key={u.userId || i} 
@@ -1399,11 +1429,11 @@ export default function App() {
               <table className="w-full text-sm text-left">
                 <thead className="text-xs text-zinc-400 bg-zinc-950/50 uppercase border-b border-zinc-800">
                   <tr>
-                    <th className="px-6 py-4 font-semibold">Date</th>
-                    <th className="px-6 py-4 font-semibold">Type</th>
-                    <th className="px-6 py-4 font-semibold">Opponent(s) / Teams</th>
-                    <th className="px-6 py-4 font-semibold text-center">Score</th>
-                    <th className="px-6 py-4 font-semibold text-right">Result</th>
+                    <th className="px-2.5 sm:px-6 py-3 sm:py-4 font-semibold">Date</th>
+                    <th className="px-2.5 sm:px-6 py-3 sm:py-4 font-semibold">Type</th>
+                    <th className="px-2.5 sm:px-6 py-3 sm:py-4 font-semibold">Opponent(s) / Teams</th>
+                    <th className="px-2.5 sm:px-6 py-3 sm:py-4 font-semibold text-center">Score</th>
+                    <th className="px-2.5 sm:px-6 py-3 sm:py-4 font-semibold text-right">Result</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
@@ -1434,7 +1464,7 @@ export default function App() {
 
                       return (
                         <tr key={battle.battleId} className="bg-zinc-900/20 hover:bg-zinc-800/30 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap text-zinc-300 font-mono text-xs">
+                          <td className="px-2.5 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-zinc-300 font-mono text-xs">
                             <div className="flex flex-col items-center sm:block sm:text-left">
                               <span>
                                 {new Intl.DateTimeFormat('en-US', {
@@ -1449,14 +1479,14 @@ export default function App() {
                               </span>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2.5 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                             <span className="px-2.5 py-1 rounded-md bg-zinc-800 text-indigo-300 border border-zinc-700 text-xs font-mono font-bold">
                               {battle.type}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-2.5 sm:px-6 py-3 sm:py-4">
                             {isTeamMatch ? (
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5">
+                              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-2.5">
                                 <div className="w-fit inline-flex flex-col bg-rose-950/40 p-2.5 rounded-lg border border-rose-500/30">
                                   <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider mb-1">Host Team</span>
                                   <div className="flex flex-col gap-1.5 w-full">
@@ -1485,7 +1515,7 @@ export default function App() {
                                   </div>
                                 </div>
 
-                                <span className="text-xs font-bold text-zinc-500 px-1 self-center">VS</span>
+                                <span className="text-xs font-bold text-zinc-500 px-1 py-0.5 self-center font-mono">VS</span>
 
                                 <div className="w-fit inline-flex flex-col bg-indigo-950/40 p-2.5 rounded-lg border border-indigo-500/30">
                                   <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-1">Rival Team</span>
@@ -1516,10 +1546,10 @@ export default function App() {
                                 </div>
                               </div>
                             ) : isFFA ? (
-                              <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-2">
                                 {battle.users.map((u, i) => (
                                   <React.Fragment key={u.userId || i}>
-                                    <div className={`flex flex-col px-2.5 py-1 rounded-md border ${
+                                    <div className={`flex flex-col px-2.5 py-1 rounded-md border w-full sm:w-auto text-left ${
                                       i === 0 
                                         ? 'bg-rose-950/40 border-rose-500/30' 
                                         : 'bg-indigo-950/40 border-indigo-500/30'
@@ -1535,15 +1565,17 @@ export default function App() {
                                         @{u.displayId}
                                       </span>
                                     </div>
-                                    {i < battle.users.length - 1 && <span className="text-zinc-500 text-xs font-bold">vs</span>}
+                                    {i < battle.users.length - 1 && (
+                                      <span className="text-zinc-500 text-xs font-bold font-mono py-0.5 self-center">vs</span>
+                                    )}
                                   </React.Fragment>
                                 ))}
                               </div>
                             ) : (
-                              <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-2">
                                 {battle.users.map((u, i) => (
                                   <React.Fragment key={u.userId || i}>
-                                    <div className={`flex flex-col px-2.5 py-1 rounded-md border ${
+                                    <div className={`flex flex-col px-2.5 py-1 rounded-md border w-full sm:w-auto text-left ${
                                       i === 0 
                                         ? 'bg-rose-950/40 border-rose-500/30' 
                                         : 'bg-indigo-950/40 border-indigo-500/30'
@@ -1560,14 +1592,14 @@ export default function App() {
                                       </span>
                                     </div>
                                     {i === 0 && battle.users.length > 1 && (
-                                      <span className="text-xs font-bold text-zinc-500 px-0.5">VS</span>
+                                      <span className="text-xs font-bold text-zinc-500 font-mono py-0.5 self-center">VS</span>
                                     )}
                                   </React.Fragment>
                                 ))}
                               </div>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <td className="px-2.5 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-center">
                             {isTeamMatch ? (
                               <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 font-mono text-sm font-bold">
                                 <span className="text-rose-400">{formatScore(team1Score)}</span>
@@ -1602,7 +1634,7 @@ export default function App() {
                               </div>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <td className="px-2.5 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right">
                             {(() => {
                               const res = battle.result;
                               const isVictory = res === 'Victory' || res === 'Victoria';
