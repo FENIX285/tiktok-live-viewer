@@ -1,225 +1,247 @@
 import express from "express";
-import { createServer } from "http";
-import { Server } from "socket.io";
-import { WebcastPushConnection } from "tiktok-live-connector";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import cors from "cors";
+import EulerStreamApiClient from "@eulerstream/euler-api-sdk";
 
 async function startServer() {
   const app = express();
-  const httpServer = createServer(app);
-  const io = new Server(httpServer, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
+  const PORT = 3000;
+
+  app.use(cors());
+  app.use(express.json());
+
+  // Cached Euler Stream API client & account ID
+  let eulerClient: EulerStreamApiClient | null = null;
+  let cachedAccountId: number | null = null;
+
+  function getEulerClient() {
+    const key = process.env.EULER_STREAM_API_KEY || process.env.EULER_API_KEY;
+    if (!key || key.trim() === "") {
+      throw new Error(
+        "EULER_STREAM_API_KEY no está configurada. Por favor, añade tu API Key de Euler Stream (https://www.eulerstream.com/) en las variables de entorno del proyecto."
+      );
+    }
+    if (!eulerClient) {
+      eulerClient = new EulerStreamApiClient({ apiKey: key.trim() });
+    }
+    return eulerClient;
+  }
+
+  // In-memory cache for TikTok creator profiles
+  interface TikTokUserProfile {
+    username: string;
+    nickname: string;
+    avatarUrl: string;
+  }
+  const userProfileCache = new Map<string, { profile: TikTokUserProfile; timestamp: number }>();
+  const CACHE_TTL_MS = 15 * 60 * 1000; // 15 min cache
+
+  async function fetchTikTokUserProfile(username: string): Promise<TikTokUserProfile | null> {
+    const clean = username.trim().replace(/^@/, "");
+    if (!clean) return null;
+
+    const cacheKey = clean.toLowerCase();
+    const cached = userProfileCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return cached.profile;
+    }
+
+    try {
+      const res = await fetch(`https://www.tiktok.com/@${encodeURIComponent(clean)}`, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      });
+
+      if (!res.ok) return null;
+      const html = await res.text();
+
+      const avatarMatch =
+        html.match(/"avatarLarger":"([^"]+)"/) ||
+        html.match(/"avatarMedium":"([^"]+)"/) ||
+        html.match(/"avatarThumb":"([^"]+)"/);
+      const nicknameMatch = html.match(/"nickname":"([^"]+)"/);
+
+      let avatarUrl = "";
+      if (avatarMatch) {
+        try {
+          avatarUrl = JSON.parse('"' + avatarMatch[1] + '"');
+        } catch {
+          avatarUrl = avatarMatch[1].replace(/\\u002F/g, "/");
+        }
+      }
+
+      let nickname = clean;
+      if (nicknameMatch) {
+        try {
+          nickname = JSON.parse('"' + nicknameMatch[1] + '"');
+        } catch {
+          nickname = nicknameMatch[1];
+        }
+      }
+
+      const profile: TikTokUserProfile = {
+        username: clean,
+        nickname: nickname || clean,
+        avatarUrl: avatarUrl || "",
+      };
+
+      if (avatarUrl) {
+        userProfileCache.set(cacheKey, { profile, timestamp: Date.now() });
+      }
+
+      return profile;
+    } catch (err) {
+      console.error(`Error fetching TikTok profile for @${clean}:`, err);
+      return null;
+    }
+  }
+
+  // Health check endpoint
+  app.get("/api/health", (_req, res) => {
+    const hasKey = Boolean(process.env.EULER_STREAM_API_KEY || process.env.EULER_API_KEY);
+    res.json({ status: "ok", eulerConfigured: hasKey });
+  });
+
+  // Creator profile info endpoint (direct TikTok profile avatar and nickname)
+  app.get("/api/tiktok-user/:username", async (req, res) => {
+    try {
+      const username = req.params.username;
+      if (!username) {
+        return res.status(400).json({ error: "Missing username parameter" });
+      }
+      const profile = await fetchTikTokUserProfile(username);
+      if (!profile) {
+        return res.status(404).json({ error: "TikTok user profile not found" });
+      }
+      return res.json(profile);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || "Failed to fetch profile" });
     }
   });
 
-  app.use(cors());
-  const PORT = 3000;
-
-  // Track active connections
-  const activeConnections = new Map<string, WebcastPushConnection>();
-
-  io.on("connection", (socket) => {
-    console.log("Client connected:", socket.id);
-
-    socket.on("join-live", (username: string) => {
-      console.log(`Socket ${socket.id} requesting join: ${username}`);
+  // Euler Stream JWT Generation Endpoint (Option B: Hybrid JWT connection)
+  app.post("/api/euler-jwt", async (req, res) => {
+    try {
+      const { uniqueId, clientApiKey } = req.body;
       
-      // Basic validation
-      if (!username || username.length < 2) {
-        socket.emit("error", "El nombre de usuario es obligatorio y debe ser válido.");
-        return;
+      if (!uniqueId || typeof uniqueId !== "string" || uniqueId.trim().length < 2) {
+        return res.status(400).json({ error: "El nombre de usuario (uniqueId) es obligatorio." });
       }
 
-      // Cleanup existing connection if any for this socket
-      const existing = activeConnections.get(socket.id);
-      if (existing) {
-        existing.disconnect();
-        activeConnections.delete(socket.id);
+      const cleanUsername = uniqueId.trim().replace(/^@/, "");
+
+      // Allow using an optional client-provided API key if provided, otherwise use server-configured key
+      let client: EulerStreamApiClient;
+      if (clientApiKey && typeof clientApiKey === "string" && clientApiKey.trim().length > 5) {
+        client = new EulerStreamApiClient({ apiKey: clientApiKey.trim() });
+      } else {
+        client = getEulerClient();
       }
 
-      const tiktokConnection = new WebcastPushConnection(username, {
-        processInitialData: true,
-        enableExtendedGiftInfo: true,
-        requestOptions: {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      // Retrieve account ID if not already cached (or if custom client key is used)
+      let accountId = cachedAccountId;
+      if (!accountId || (clientApiKey && clientApiKey.trim().length > 5)) {
+        const accountRes = await client.accounts.retrieveAccountSelf();
+        if (accountRes.data && accountRes.data.account) {
+          accountId = accountRes.data.account.id;
+          if (!clientApiKey) {
+            cachedAccountId = accountId;
           }
         }
-      });
-
-      tiktokConnection.connect().then(state => {
-        console.log(`Connected to room ${state.roomId} for user ${username}`);
-        
-        // Send initial room stats if available
-        if (state.roomInfo) {
-          console.log("Room Info keys:", Object.keys(state.roomInfo));
-          let cTime = state.roomInfo.createTime || state.roomInfo.create_time;
-          if (cTime) {
-            // Some versions return it as a string or number
-            const cTimeParsed = typeof cTime === 'string' ? parseInt(cTime) : Number(cTime);
-            
-            // TikTok return createTime in seconds usually (e.g. 1714438400)
-            // If it's less than 10^12, it's likely seconds
-            if (cTimeParsed < 10000000000) {
-              cTime = cTimeParsed * 1000;
-            } else {
-              cTime = cTimeParsed;
-            }
-          }
-
-          socket.emit("room-update", { 
-            viewerCount: state.roomInfo.viewerCount || 0,
-            likes: parseInt(state.roomInfo.likeCount) || 0,
-            createTime: cTime || Date.now()
-          });
-        }
-        
-        const ownerDisplayId = state.roomInfo?.owner?.display_id || username;
-        const ownerUserId = (state.roomInfo?.owner?.id_str || state.roomInfo?.owner?.id || '').toString();
-        socket.emit("connected", { roomId: state.roomId, username: ownerDisplayId, userId: ownerUserId });
-      }).catch(err => {
-        console.error("TikTok Connection Failed:", err);
-        let errorMsg = "Failed to connect to TikTok Live.";
-        if (err.message && err.message.includes("not live")) {
-          errorMsg = "El usuario no está en vivo actualmente.";
-        } else if (err.name === "FetchIsLiveError") {
-          errorMsg = "No se pudo verificar si el usuario está en vivo. TikTok podría estar bloqueando las solicitudes. Intenta de nuevo en unos minutos.";
-        } else {
-          errorMsg = "Error al conectar con TikTok Live. Asegúrate de que el nombre de usuario sea correcto y que esté en vivo.";
-        }
-        socket.emit("error", errorMsg);
-      });
-
-      // Events
-      tiktokConnection.on('chat', data => {
-        socket.emit("chat-msg", {
-          id: data.msgId,
-          uniqueId: data.uniqueId,
-          nickname: data.nickname,
-          comment: data.comment,
-          profilePictureUrl: data.profilePictureUrl,
-          timestamp: Date.now()
-        });
-      });
-
-      tiktokConnection.on('gift', data => {
-        // Enviar todos los datos necesarios y filtrar combos en progreso que no hayan terminado
-        // Si es tipo streak/combo (giftType === 1), solo lo pasamos cuando termine (repeatEnd === true)
-        // Pero para estar más seguros, podemos enviar repeatEnd y que el frontend / backend filtre.
-        // El usuario pide: "Solo procesar el regalo cuando: data.repeatEnd === true"
-        if (data.giftType === 1 && !data.repeatEnd) {
-          return; // Ignore intermediate combo updates
-        }
-
-        socket.emit("gift-msg", {
-          userId: data.userId || (data.user && data.user.userId),
-          uniqueId: data.uniqueId,
-          nickname: data.nickname,
-          giftName: data.giftName,
-          repeatCount: data.repeatCount || 1,
-          profilePictureUrl: data.profilePictureUrl,
-          diamondCount: data.diamondCount || (data.giftDetails && data.giftDetails.diamondCount) || 0,
-          repeatEnd: data.repeatEnd,
-          giftType: data.giftType
-        });
-      });
-
-      tiktokConnection.on('like', data => {
-        socket.emit("like-msg", {
-          uniqueId: data.uniqueId,
-          nickname: data.nickname,
-          likeCount: data.likeCount,
-          totalLikeCount: data.totalLikeCount,
-          profilePictureUrl: data.profilePictureUrl
-        });
-      });
-
-      tiktokConnection.on('social', data => {
-          socket.emit("event-msg", {
-              uniqueId: data.uniqueId,
-              nickname: data.nickname,
-              type: data.displayType // e.g. "follow", "share"
-          });
-      });
-
-      tiktokConnection.on('member', data => {
-        socket.emit("member-join", {
-          uniqueId: data.uniqueId,
-          nickname: data.nickname,
-          profilePictureUrl: data.profilePictureUrl
-        });
-      });
-
-      tiktokConnection.on('roomUser', data => {
-        socket.emit("room-update", {
-          viewerCount: data.viewerCount,
-          topViewers: data.topViewers // Capturamos la lista de tops si está disponible
-        });
-        
-        if (data.topViewers && Array.isArray(data.topViewers)) {
-          socket.emit("top-gifters-update", data.topViewers);
-        }
-      });
-
-      tiktokConnection.on('ranklist', data => {
-        socket.emit("ranking-update", data);
-      });
-
-      tiktokConnection.on('roomViewerList', data => {
-        socket.emit("room-update", {
-          viewerCount: data.viewerCount,
-          topViewers: data.viewers
-        });
-      });
-
-      tiktokConnection.on('linkMicBattle', data => {
-        socket.emit("battle-msg", data);
-      });
-
-      tiktokConnection.on('linkMicArmies', data => {
-        socket.emit("battle-armies-msg", data);
-      });
-
-      tiktokConnection.on('decodedData', (eventName, decodedData) => {
-        if (eventName === 'WebcastLinkMicBattle') {
-           socket.emit("raw-battle-msg", decodedData);
-        }
-        if (eventName === 'WebcastLinkMicArmies') {
-           socket.emit("raw-battle-armies-msg", decodedData);
-        }
-      });
-
-      tiktokConnection.on('error', err => {
-        socket.emit("error", "TikTok Connection Error: " + err.message);
-      });
-
-      tiktokConnection.on('disconnected', () => {
-        socket.emit("status", "disconnected");
-      });
-
-      tiktokConnection.on('streamEnd', () => {
-        socket.emit("status", "ended");
-        tiktokConnection.disconnect();
-      });
-
-      activeConnections.set(socket.id, tiktokConnection);
-    });
-
-    socket.on("disconnect", () => {
-      const tiktok = activeConnections.get(socket.id);
-      if (tiktok) {
-        tiktok.disconnect();
-        activeConnections.delete(socket.id);
       }
-      console.log("Client disconnected:", socket.id);
-    });
+
+      if (!accountId) {
+        return res.status(500).json({
+          error: "No se pudo recuperar la cuenta de Euler Stream. Verifica la validez de tu API Key."
+        });
+      }
+
+      // Generate a scoped ephemeral JWT and fetch creator profile in parallel
+      const [jwtRes, userProfile] = await Promise.all([
+        client.authentication.createJWT(accountId, {
+          expireAfter: 3600,
+          name: `viewer-${cleanUsername}-${Date.now()}`,
+          websockets: {
+            allowedCreators: [cleanUsername],
+            maxWebSockets: 2
+          }
+        }),
+        fetchTikTokUserProfile(cleanUsername).catch(() => null)
+      ]);
+
+      const token = jwtRes.data.token;
+      if (!token) {
+        return res.status(500).json({
+          error: "Euler Stream no retornó un token JWT válido."
+        });
+      }
+
+      return res.json({
+        token,
+        uniqueId: cleanUsername,
+        avatarUrl: userProfile?.avatarUrl || "",
+        nickname: userProfile?.nickname || cleanUsername,
+        expiresAt: jwtRes.data.config?.expiresAt,
+        wsUrl: `wss://ws.eulerstream.com?uniqueId=${encodeURIComponent(cleanUsername)}&jwtKey=${encodeURIComponent(token)}`
+      });
+    } catch (err: any) {
+      console.error("Error generando JWT en Euler Stream:", err?.response?.data || err?.message || err);
+      const errorMsg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Error al comunicarse con la API de Euler Stream.";
+      return res.status(500).json({ error: errorMsg });
+    }
   });
 
-  // Vite middleware for development
+  // Avatar image proxy endpoint to bypass CORS / hotlinking restrictions from TikTok CDN
+  app.get("/api/proxy/avatar", async (req, res) => {
+    try {
+      const rawUrl = req.query.url as string;
+      if (!rawUrl) {
+        return res.status(400).send("Missing url parameter");
+      }
+
+      // Note: req.query.url is already decoded by Express. Do NOT call decodeURIComponent again,
+      // as double decoding corrupts cryptographic parameters like x-signature in TikTok CDN URLs.
+      const targetUrl = rawUrl;
+      const parsed = new URL(targetUrl);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return res.status(400).send("Invalid protocol");
+      }
+
+      // Fetch avatar from TikTok CDN using standard browser headers and referer
+      const response = await fetch(targetUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+          "Referer": "https://www.tiktok.com/",
+        },
+      });
+
+      if (!response.ok) {
+        return res.status(response.status).send("Failed to fetch image");
+      }
+
+      const contentType = response.headers.get("content-type") || "image/jpeg";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+
+      const arrayBuffer = await response.arrayBuffer();
+      return res.send(Buffer.from(arrayBuffer));
+    } catch (err: any) {
+      console.error("Avatar proxy error:", err.message);
+      return res.status(500).send("Proxy error");
+    }
+  });
+
+  // Vite middleware for development vs static build in production
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -227,16 +249,17 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
 startServer();
+

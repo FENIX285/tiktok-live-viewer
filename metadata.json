@@ -1,6 +1,8 @@
 {
-  "name": "Remix: TikTok Live Chat Viewer22",
+  "name": "Remix: TikTok Live Chat Viewer22 euler",
   "description": "Visualiza el chat en tiempo real de cualquier directo de TikTok solo con el nombre de usuario.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
