@@ -101,6 +101,153 @@ async function startServer() {
     }
   }
 
+  // In-memory store for Top Gifters
+  interface BackendTopGifter {
+    userId: string;
+    uniqueId: string;
+    nickname: string;
+    avatarUrl: string;
+    giftsSent: number;
+    totalCoins: number;
+    lastGiftName: string;
+    lastGiftCount: number;
+    lastGiftIsCombo: boolean;
+    lastGiftComboCount?: number;
+    lastUpdated: number;
+  }
+
+  const giftersStore = new Map<string, Map<string, BackendTopGifter>>();
+
+  function getRoomGiftersMap(roomKey: string = "default"): Map<string, BackendTopGifter> {
+    const key = roomKey.toLowerCase().trim() || "default";
+    let map = giftersStore.get(key);
+    if (!map) {
+      map = new Map<string, BackendTopGifter>();
+      giftersStore.set(key, map);
+    }
+    return map;
+  }
+
+  function recordGift(
+    roomKey: string,
+    gift: {
+      userId?: string;
+      uniqueId: string;
+      nickname: string;
+      avatarUrl?: string;
+      giftName: string;
+      giftCount: number;
+      coins: number;
+      isCombo?: boolean;
+      comboCount?: number;
+    }
+  ) {
+    const map = getRoomGiftersMap(roomKey);
+    const key = (gift.userId || gift.uniqueId || "anonymous").toString();
+    const existing = map.get(key);
+
+    const giftsSent = (existing?.giftsSent || 0) + (gift.giftCount || 1);
+    const totalCoins = (existing?.totalCoins || 0) + (gift.coins || 0);
+    const avatarUrl = gift.avatarUrl || existing?.avatarUrl || "";
+    const isCombo = gift.isCombo !== undefined ? Boolean(gift.isCombo) : (gift.giftCount > 1 || (gift.comboCount || 1) > 1);
+    const comboCount = gift.comboCount || gift.giftCount || 1;
+
+    map.set(key, {
+      userId: key,
+      uniqueId: gift.uniqueId || existing?.uniqueId || key,
+      nickname: gift.nickname || existing?.nickname || gift.uniqueId || "Anonymous",
+      avatarUrl: avatarUrl,
+      giftsSent: giftsSent,
+      totalCoins: totalCoins,
+      lastGiftName: gift.giftName || existing?.lastGiftName || "Regalo",
+      lastGiftCount: gift.giftCount || 1,
+      lastGiftIsCombo: isCombo,
+      lastGiftComboCount: comboCount,
+      lastUpdated: Date.now(),
+    });
+  }
+
+  // Top 10 Gifters endpoint
+  app.get("/api/gifters/top10", (req, res) => {
+    const roomParam = (req.query.username as string) || (req.query.room as string) || "";
+    let targetMap: Map<string, BackendTopGifter>;
+
+    if (roomParam) {
+      targetMap = getRoomGiftersMap(roomParam);
+    } else {
+      // If no room is specified, find the map with the most gifters or fallback to default
+      targetMap = getRoomGiftersMap("default");
+      for (const [, rMap] of giftersStore) {
+        if (rMap.size > targetMap.size) {
+          targetMap = rMap;
+        }
+      }
+    }
+
+    const sorted = Array.from(targetMap.values())
+      .sort((a, b) => {
+        if (b.totalCoins === a.totalCoins) {
+          return b.giftsSent - a.giftsSent;
+        }
+        return b.totalCoins - a.totalCoins;
+      })
+      .slice(0, 10);
+
+    const responseData = sorted.map((g, index) => ({
+      rank: index + 1,
+      userId: g.userId,
+      uniqueId: g.uniqueId,
+      nickname: g.nickname,
+      avatarUrl: g.avatarUrl,
+      giftsSent: g.giftsSent,
+      totalCoins: g.totalCoins,
+      lastGiftName: g.lastGiftName,
+      lastGiftCount: g.lastGiftCount,
+      lastGiftIsCombo: g.lastGiftIsCombo,
+      lastGiftComboCount: g.lastGiftComboCount,
+    }));
+
+    return res.json(responseData);
+  });
+
+  // Record gift endpoint to register gifts in backend
+  app.post("/api/gifters/record", (req, res) => {
+    try {
+      const { username, room, userId, uniqueId, nickname, avatarUrl, giftName, giftCount, coins, isCombo, comboCount } = req.body;
+      const targetRoom = username || room || "default";
+
+      if (!uniqueId && !userId) {
+        return res.status(400).json({ error: "Missing uniqueId or userId" });
+      }
+
+      recordGift(targetRoom, {
+        userId,
+        uniqueId: uniqueId || userId,
+        nickname: nickname || uniqueId || userId,
+        avatarUrl,
+        giftName: giftName || "Regalo",
+        giftCount: Number(giftCount) || 1,
+        coins: Number(coins) || 0,
+        isCombo: isCombo !== undefined ? Boolean(isCombo) : undefined,
+        comboCount: Number(comboCount) || undefined,
+      });
+
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || "Failed to record gift" });
+    }
+  });
+
+  // Reset gifters for a room
+  app.post("/api/gifters/reset", (req, res) => {
+    const room = req.body?.username || req.body?.room || "default";
+    const map = giftersStore.get(room.toLowerCase());
+    if (map) {
+      map.clear();
+    }
+    return res.json({ success: true });
+  });
+
   // Health check endpoint
   app.get("/api/health", (_req, res) => {
     const hasKey = Boolean(process.env.EULER_STREAM_API_KEY || process.env.EULER_API_KEY);
