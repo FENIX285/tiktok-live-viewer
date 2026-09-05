@@ -102,6 +102,16 @@ async function startServer() {
   }
 
   // In-memory store for Top Gifters
+  interface BackendGiftRecord {
+    id: string;
+    giftName: string;
+    giftCount: number;
+    coins: number;
+    isCombo: boolean;
+    comboCount?: number;
+    timestamp: number;
+  }
+
   interface BackendTopGifter {
     userId: string;
     uniqueId: string;
@@ -114,6 +124,7 @@ async function startServer() {
     lastGiftIsCombo: boolean;
     lastGiftComboCount?: number;
     lastUpdated: number;
+    history: BackendGiftRecord[];
   }
 
   const giftersStore = new Map<string, Map<string, BackendTopGifter>>();
@@ -146,11 +157,46 @@ async function startServer() {
     const key = (gift.userId || gift.uniqueId || "anonymous").toString();
     const existing = map.get(key);
 
-    const giftsSent = (existing?.giftsSent || 0) + (gift.giftCount || 1);
+    const giftCount = gift.giftCount || 1;
+    const giftsSent = (existing?.giftsSent || 0) + giftCount;
     const totalCoins = (existing?.totalCoins || 0) + (gift.coins || 0);
     const avatarUrl = gift.avatarUrl || existing?.avatarUrl || "";
-    const isCombo = gift.isCombo !== undefined ? Boolean(gift.isCombo) : (gift.giftCount > 1 || (gift.comboCount || 1) > 1);
-    const comboCount = gift.comboCount || gift.giftCount || 1;
+    const isCombo = gift.isCombo !== undefined ? Boolean(gift.isCombo) : (giftCount > 1 || (gift.comboCount || 1) > 1);
+    const comboCount = gift.comboCount || giftCount || 1;
+    const currentGiftName = gift.giftName || existing?.lastGiftName || "Regalo";
+
+    const existingHistory = existing?.history || [];
+    let updatedHistory: BackendGiftRecord[];
+
+    const recentRecord = existingHistory[0];
+    const isRecentSameCombo = recentRecord && 
+      recentRecord.giftName === currentGiftName && 
+      recentRecord.isCombo &&
+      (Date.now() - recentRecord.timestamp < 10000);
+
+    const unitPrice = giftCount > 0 ? (gift.coins / giftCount) : (gift.coins || 0);
+
+    if (isRecentSameCombo && isCombo) {
+      const updatedRecord: BackendGiftRecord = {
+        ...recentRecord,
+        giftCount: comboCount,
+        comboCount: comboCount,
+        coins: Math.round(comboCount * unitPrice) || (recentRecord.coins + (gift.coins || 0)),
+        timestamp: Date.now(),
+      };
+      updatedHistory = [updatedRecord, ...existingHistory.slice(1)];
+    } else {
+      const newRecord: BackendGiftRecord = {
+        id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        giftName: currentGiftName,
+        giftCount: isCombo ? comboCount : giftCount,
+        coins: isCombo ? Math.round(comboCount * unitPrice) : (gift.coins || 0),
+        isCombo: isCombo,
+        comboCount: isCombo ? comboCount : undefined,
+        timestamp: Date.now(),
+      };
+      updatedHistory = [newRecord, ...existingHistory].slice(0, 50);
+    }
 
     map.set(key, {
       userId: key,
@@ -159,11 +205,12 @@ async function startServer() {
       avatarUrl: avatarUrl,
       giftsSent: giftsSent,
       totalCoins: totalCoins,
-      lastGiftName: gift.giftName || existing?.lastGiftName || "Regalo",
-      lastGiftCount: gift.giftCount || 1,
+      lastGiftName: currentGiftName,
+      lastGiftCount: giftCount,
       lastGiftIsCombo: isCombo,
       lastGiftComboCount: comboCount,
       lastUpdated: Date.now(),
+      history: updatedHistory,
     });
   }
 
@@ -205,9 +252,30 @@ async function startServer() {
       lastGiftCount: g.lastGiftCount,
       lastGiftIsCombo: g.lastGiftIsCombo,
       lastGiftComboCount: g.lastGiftComboCount,
+      history: g.history || [],
     }));
 
     return res.json(responseData);
+  });
+
+  // Specific gifter history endpoint
+  app.get("/api/gifters/history", (req, res) => {
+    const roomParam = (req.query.username as string) || (req.query.room as string) || "default";
+    const userParam = (req.query.userId as string) || (req.query.uniqueId as string) || "";
+    if (!userParam) {
+      return res.status(400).json({ error: "Missing userId or uniqueId" });
+    }
+    const map = getRoomGiftersMap(roomParam);
+    const gifter = map.get(userParam) || Array.from(map.values()).find(g => g.uniqueId.toLowerCase() === userParam.toLowerCase());
+    if (!gifter) {
+      return res.json({ history: [] });
+    }
+    return res.json({
+      userId: gifter.userId,
+      uniqueId: gifter.uniqueId,
+      nickname: gifter.nickname,
+      history: gifter.history || [],
+    });
   });
 
   // Record gift endpoint to register gifts in backend
