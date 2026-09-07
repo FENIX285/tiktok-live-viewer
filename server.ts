@@ -110,6 +110,8 @@ async function startServer() {
     isCombo: boolean;
     comboCount?: number;
     timestamp: number;
+    groupId?: string;
+    isEnded?: boolean;
   }
 
   interface BackendTopGifter {
@@ -151,6 +153,8 @@ async function startServer() {
       coins: number;
       isCombo?: boolean;
       comboCount?: number;
+      repeatEnd?: boolean;
+      groupId?: string;
     }
   ) {
     const map = getRoomGiftersMap(roomKey);
@@ -161,27 +165,37 @@ async function startServer() {
     const giftsSent = (existing?.giftsSent || 0) + giftCount;
     const totalCoins = (existing?.totalCoins || 0) + (gift.coins || 0);
     const avatarUrl = gift.avatarUrl || existing?.avatarUrl || "";
-    const isCombo = gift.isCombo !== undefined ? Boolean(gift.isCombo) : (giftCount > 1 || (gift.comboCount || 1) > 1);
+    const isEnded = Boolean(gift.repeatEnd);
+    const groupId = gift.groupId || "";
     const comboCount = gift.comboCount || giftCount || 1;
+    const isCombo = Boolean(gift.isCombo || comboCount > 1 || groupId);
     const currentGiftName = gift.giftName || existing?.lastGiftName || "Regalo";
 
     const existingHistory = existing?.history || [];
-    let updatedHistory: BackendGiftRecord[];
-
     const recentRecord = existingHistory[0];
-    const isRecentSameCombo = recentRecord && 
-      recentRecord.giftName === currentGiftName && 
+
+    // Check if this incoming gift is continuation of the exact same active ongoing combo
+    const isSameOngoingCombo = Boolean(
+      recentRecord &&
+      !recentRecord.isEnded &&
+      recentRecord.giftName === currentGiftName &&
       recentRecord.isCombo &&
-      (Date.now() - recentRecord.timestamp < 10000);
+      (
+        (groupId && recentRecord.groupId && groupId === recentRecord.groupId) ||
+        (!groupId && !recentRecord.groupId && (Date.now() - recentRecord.timestamp < 3500) && comboCount >= (recentRecord.comboCount || 1))
+      )
+    );
 
     const unitPrice = giftCount > 0 ? (gift.coins / giftCount) : (gift.coins || 0);
+    let updatedHistory: BackendGiftRecord[];
 
-    if (isRecentSameCombo && isCombo) {
+    if (isSameOngoingCombo && recentRecord) {
       const updatedRecord: BackendGiftRecord = {
         ...recentRecord,
         giftCount: comboCount,
         comboCount: comboCount,
         coins: Math.round(comboCount * unitPrice) || (recentRecord.coins + (gift.coins || 0)),
+        isEnded: isEnded,
         timestamp: Date.now(),
       };
       updatedHistory = [updatedRecord, ...existingHistory.slice(1)];
@@ -193,9 +207,11 @@ async function startServer() {
         coins: isCombo ? Math.round(comboCount * unitPrice) : (gift.coins || 0),
         isCombo: isCombo,
         comboCount: isCombo ? comboCount : undefined,
+        groupId: groupId || undefined,
+        isEnded: isEnded || !isCombo,
         timestamp: Date.now(),
       };
-      updatedHistory = [newRecord, ...existingHistory].slice(0, 50);
+      updatedHistory = [newRecord, ...existingHistory].slice(0, 200);
     }
 
     map.set(key, {
@@ -281,7 +297,7 @@ async function startServer() {
   // Record gift endpoint to register gifts in backend
   app.post("/api/gifters/record", (req, res) => {
     try {
-      const { username, room, userId, uniqueId, nickname, avatarUrl, giftName, giftCount, coins, isCombo, comboCount } = req.body;
+      const { username, room, userId, uniqueId, nickname, avatarUrl, giftName, giftCount, coins, isCombo, comboCount, repeatEnd, groupId } = req.body;
       const targetRoom = username || room || "default";
 
       if (!uniqueId && !userId) {
@@ -298,6 +314,8 @@ async function startServer() {
         coins: Number(coins) || 0,
         isCombo: isCombo !== undefined ? Boolean(isCombo) : undefined,
         comboCount: Number(comboCount) || undefined,
+        repeatEnd: Boolean(repeatEnd),
+        groupId: groupId || undefined,
       });
 
       return res.json({ success: true });
