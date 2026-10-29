@@ -1808,21 +1808,30 @@ export default function App() {
                             {isTeamMatch ? (
                               <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-2.5">
                                 <div className="w-fit inline-flex flex-col bg-rose-950/40 p-2.5 rounded-lg border border-rose-500/30">
-                                  <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider mb-1">Host Team</span>
+                                  <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider mb-1.5">Host Team</span>
                                   <div className="flex flex-col gap-1.5 w-full">
                                     {team1.map((u, uIdx) => {
                                       const isTop = isTop2Score(u?.score);
+                                      const avatarSrc = u?.profilePictureUrl || (u?.userId === currentTargetUserIdRef.current || u?.displayId?.toLowerCase() === currentUsername?.toLowerCase() ? hostAvatar : '');
                                       return (
-                                        <div key={u?.userId || uIdx} className="w-full flex items-center justify-between gap-3 bg-rose-900/30 px-2.5 py-1 rounded-md border border-rose-500/20">
-                                          <div className="flex flex-col text-left">
-                                            <span className="text-xs font-semibold text-rose-200 leading-tight">
-                                              {u?.nickname || u?.displayId || 'User'}
-                                            </span>
-                                            <span className="text-rose-400/80 text-[10px] font-mono leading-tight">
-                                              @{u?.displayId || 'user'}
-                                            </span>
+                                        <div key={u?.userId || uIdx} className="w-full flex items-center justify-between gap-3 bg-rose-900/30 px-2.5 py-1.5 rounded-md border border-rose-500/20">
+                                          <div className="flex items-center gap-2 text-left min-w-0">
+                                            <Avatar 
+                                              src={avatarSrc} 
+                                              name={u?.nickname || u?.displayId || 'User'} 
+                                              sizeClassName="w-6 h-6 sm:w-7 sm:h-7" 
+                                              className="border border-rose-500/30 text-[10px] font-mono shrink-0 shadow-xs" 
+                                            />
+                                            <div className="flex flex-col min-w-0">
+                                              <span className="text-xs font-semibold text-rose-200 leading-tight truncate">
+                                                {u?.nickname || u?.displayId || 'User'}
+                                              </span>
+                                              <span className="text-rose-400/80 text-[10px] font-mono leading-tight truncate">
+                                                @{u?.displayId || 'user'}
+                                              </span>
+                                            </div>
                                           </div>
-                                          <span className={`font-mono text-xs px-2 py-0.5 rounded-md font-bold whitespace-nowrap ml-2 ${
+                                          <span className={`font-mono text-xs px-2 py-0.5 rounded-md font-bold whitespace-nowrap ml-2 shrink-0 ${
                                             isTop 
                                               ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-xs' 
                                               : 'text-rose-300 bg-rose-500/10'
@@ -1838,21 +1847,30 @@ export default function App() {
                                 <span className="text-xs font-bold text-zinc-500 px-1 py-0.5 self-center font-mono">VS</span>
 
                                 <div className="w-fit inline-flex flex-col bg-indigo-950/40 p-2.5 rounded-lg border border-indigo-500/30">
-                                  <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-1">Rival Team</span>
+                                  <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-1.5">Rival Team</span>
                                   <div className="flex flex-col gap-1.5 w-full">
                                     {team2.map((u, uIdx) => {
                                       const isTop = isTop2Score(u?.score);
+                                      const avatarSrc = u?.profilePictureUrl || (u?.userId === currentTargetUserIdRef.current || u?.displayId?.toLowerCase() === currentUsername?.toLowerCase() ? hostAvatar : '');
                                       return (
-                                        <div key={u?.userId || uIdx} className="w-full flex items-center justify-between gap-3 bg-indigo-900/30 px-2.5 py-1 rounded-md border border-indigo-500/20">
-                                          <div className="flex flex-col text-left">
-                                            <span className="text-xs font-semibold text-indigo-200 leading-tight">
-                                              {u?.nickname || u?.displayId || 'User'}
-                                            </span>
-                                            <span className="text-indigo-400/80 text-[10px] font-mono leading-tight">
-                                              @{u?.displayId || 'user'}
-                                            </span>
+                                        <div key={u?.userId || uIdx} className="w-full flex items-center justify-between gap-3 bg-indigo-900/30 px-2.5 py-1.5 rounded-md border border-indigo-500/20">
+                                          <div className="flex items-center gap-2 text-left min-w-0">
+                                            <Avatar 
+                                              src={avatarSrc} 
+                                              name={u?.nickname || u?.displayId || 'User'} 
+                                              sizeClassName="w-6 h-6 sm:w-7 sm:h-7" 
+                                              className="border border-indigo-500/30 text-[10px] font-mono shrink-0 shadow-xs" 
+                                            />
+                                            <div className="flex flex-col min-w-0">
+                                              <span className="text-xs font-semibold text-indigo-200 leading-tight truncate">
+                                                {u?.nickname || u?.displayId || 'User'}
+                                              </span>
+                                              <span className="text-indigo-400/80 text-[10px] font-mono leading-tight truncate">
+                                                @{u?.displayId || 'user'}
+                                              </span>
+                                            </div>
                                           </div>
-                                          <span className={`font-mono text-xs px-2 py-0.5 rounded-md font-bold whitespace-nowrap ml-2 ${
+                                          <span className={`font-mono text-xs px-2 py-0.5 rounded-md font-bold whitespace-nowrap ml-2 shrink-0 ${
                                             isTop 
                                               ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-xs' 
                                               : 'text-indigo-300 bg-indigo-500/10'
@@ -1867,55 +1885,77 @@ export default function App() {
                               </div>
                             ) : isFFA ? (
                               <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-2">
-                                {(battle.users || []).map((u, i) => (
-                                  <React.Fragment key={u?.userId || i}>
-                                    <div className={`flex flex-col px-2.5 py-1 rounded-md border w-full sm:w-auto text-left ${
-                                      i === 0 
-                                        ? 'bg-rose-950/40 border-rose-500/30' 
-                                        : 'bg-indigo-950/40 border-indigo-500/30'
-                                    }`}>
-                                      <span className={`text-xs font-semibold leading-tight ${
-                                        i === 0 ? 'text-rose-200' : 'text-indigo-200'
+                                {(battle.users || []).map((u, i) => {
+                                  const avatarSrc = u?.profilePictureUrl || (i === 0 ? hostAvatar : '');
+                                  return (
+                                    <React.Fragment key={u?.userId || i}>
+                                      <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border w-full sm:w-auto text-left ${
+                                        i === 0 
+                                          ? 'bg-rose-950/40 border-rose-500/30' 
+                                          : 'bg-indigo-950/40 border-indigo-500/30'
                                       }`}>
-                                        {u?.nickname || u?.displayId || 'User'}
-                                      </span>
-                                      <span className={`text-[10px] font-mono leading-tight ${
-                                        i === 0 ? 'text-rose-400/80' : 'text-indigo-400/80'
-                                      }`}>
-                                        @{u?.displayId || 'user'}
-                                      </span>
-                                    </div>
-                                    {i < (battle.users || []).length - 1 && (
-                                      <span className="text-zinc-500 text-xs font-bold font-mono py-0.5 self-center">vs</span>
-                                    )}
-                                  </React.Fragment>
-                                ))}
+                                        <Avatar 
+                                          src={avatarSrc} 
+                                          name={u?.nickname || u?.displayId || 'User'} 
+                                          sizeClassName="w-6 h-6 sm:w-7 sm:h-7" 
+                                          className={`border text-[10px] font-mono shrink-0 shadow-xs ${i === 0 ? 'border-rose-500/30' : 'border-indigo-500/30'}`} 
+                                        />
+                                        <div className="flex flex-col min-w-0">
+                                          <span className={`text-xs font-semibold leading-tight truncate ${
+                                            i === 0 ? 'text-rose-200' : 'text-indigo-200'
+                                          }`}>
+                                            {u?.nickname || u?.displayId || 'User'}
+                                          </span>
+                                          <span className={`text-[10px] font-mono leading-tight truncate ${
+                                            i === 0 ? 'text-rose-400/80' : 'text-indigo-400/80'
+                                          }`}>
+                                            @{u?.displayId || 'user'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {i < (battle.users || []).length - 1 && (
+                                        <span className="text-zinc-500 text-xs font-bold font-mono py-0.5 self-center">vs</span>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
                               </div>
                             ) : (
                               <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-2">
-                                {(battle.users || []).map((u, i) => (
-                                  <React.Fragment key={u?.userId || i}>
-                                    <div className={`flex flex-col px-2.5 py-1 rounded-md border w-full sm:w-auto text-left ${
-                                      i === 0 
-                                        ? 'bg-rose-950/40 border-rose-500/30' 
-                                        : 'bg-indigo-950/40 border-indigo-500/30'
-                                    }`}>
-                                      <span className={`text-xs font-semibold leading-tight ${
-                                        i === 0 ? 'text-rose-200' : 'text-indigo-200'
+                                {(battle.users || []).map((u, i) => {
+                                  const avatarSrc = u?.profilePictureUrl || (i === 0 ? hostAvatar : '');
+                                  return (
+                                    <React.Fragment key={u?.userId || i}>
+                                      <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border w-full sm:w-auto text-left ${
+                                        i === 0 
+                                          ? 'bg-rose-950/40 border-rose-500/30' 
+                                          : 'bg-indigo-950/40 border-indigo-500/30'
                                       }`}>
-                                        {u?.nickname || u?.displayId || 'User'}
-                                      </span>
-                                      <span className={`text-[10px] font-mono leading-tight ${
-                                        i === 0 ? 'text-rose-400/80' : 'text-indigo-400/80'
-                                      }`}>
-                                        @{u?.displayId || 'user'}
-                                      </span>
-                                    </div>
-                                    {i === 0 && (battle.users || []).length > 1 && (
-                                      <span className="text-xs font-bold text-zinc-500 font-mono py-0.5 self-center">VS</span>
-                                    )}
-                                  </React.Fragment>
-                                ))}
+                                        <Avatar 
+                                          src={avatarSrc} 
+                                          name={u?.nickname || u?.displayId || 'User'} 
+                                          sizeClassName="w-6 h-6 sm:w-7 sm:h-7" 
+                                          className={`border text-[10px] font-mono shrink-0 shadow-xs ${i === 0 ? 'border-rose-500/30' : 'border-indigo-500/30'}`} 
+                                        />
+                                        <div className="flex flex-col min-w-0">
+                                          <span className={`text-xs font-semibold leading-tight truncate ${
+                                            i === 0 ? 'text-rose-200' : 'text-indigo-200'
+                                          }`}>
+                                            {u?.nickname || u?.displayId || 'User'}
+                                          </span>
+                                          <span className={`text-[10px] font-mono leading-tight truncate ${
+                                            i === 0 ? 'text-rose-400/80' : 'text-indigo-400/80'
+                                          }`}>
+                                            @{u?.displayId || 'user'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {i === 0 && (battle.users || []).length > 1 && (
+                                        <span className="text-xs font-bold text-zinc-500 font-mono py-0.5 self-center">VS</span>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
                               </div>
                             )}
                           </td>
