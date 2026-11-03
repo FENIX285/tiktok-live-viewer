@@ -33,6 +33,7 @@ async function startServer() {
     username: string;
     nickname: string;
     avatarUrl: string;
+    startTime?: number;
   }
   const userProfileCache = new Map<string, { profile: TikTokUserProfile; timestamp: number }>();
   const CACHE_TTL_MS = 15 * 60 * 1000; // 15 min cache
@@ -65,6 +66,11 @@ async function startServer() {
         html.match(/"avatarMedium":"([^"]+)"/) ||
         html.match(/"avatarThumb":"([^"]+)"/);
       const nicknameMatch = html.match(/"nickname":"([^"]+)"/);
+      const startTimeMatch =
+        html.match(/"start_time":\s*"?(\d+)"?/) ||
+        html.match(/"startTime":\s*"?(\d+)"?/) ||
+        html.match(/"createTime":\s*"?(\d+)"?/) ||
+        html.match(/"create_time":\s*"?(\d+)"?/);
 
       let avatarUrl = "";
       if (avatarMatch) {
@@ -84,10 +90,19 @@ async function startServer() {
         }
       }
 
+      let startTime: number | undefined = undefined;
+      if (startTimeMatch) {
+        const parsed = parseInt(startTimeMatch[1], 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          startTime = parsed < 10000000000 ? parsed * 1000 : parsed;
+        }
+      }
+
       const profile: TikTokUserProfile = {
         username: clean,
         nickname: nickname || clean,
         avatarUrl: avatarUrl || "",
+        startTime: startTime,
       };
 
       if (avatarUrl) {
@@ -419,6 +434,7 @@ async function startServer() {
         uniqueId: cleanUsername,
         avatarUrl: userProfile?.avatarUrl || "",
         nickname: userProfile?.nickname || cleanUsername,
+        startTime: userProfile?.startTime,
         expiresAt: jwtRes.data.config?.expiresAt,
         wsUrl: `wss://ws.eulerstream.com?uniqueId=${encodeURIComponent(cleanUsername)}&jwtKey=${encodeURIComponent(token)}`
       });
