@@ -1,6 +1,6 @@
 {
-  "name": "Remix: TikTok Live Chat Viewer22 euler  2",
-  "description": "Visualiza el chat en tiempo real de cualquier directo de TikTok solo con el nombre de usuario.",
+  "name": "TikTok Live Battle & Speed Challenge Monitor",
+  "description": "Monitor de Batallas TikTok LIVE en tiempo real con detección de Retos de Velocidad, Potenciadores (Guante, Neblina, Rayito x2, x3, Cronómetro) y soporte para todos los modos de batalla (1v1, 2v2, 3v1, 1v1v1v1).",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

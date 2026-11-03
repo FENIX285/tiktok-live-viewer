@@ -355,6 +355,33 @@ export default function App() {
   const [battlePage, setBattlePage] = useState(1);
   const BATTLES_PER_PAGE = 10;
 
+  const [streamStartTime, setStreamStartTime] = useState<number | null>(null);
+  const [uptimeTicker, setUptimeTicker] = useState(0);
+  const connectionStartTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!isConnected) return;
+    const timer = setInterval(() => {
+      setUptimeTicker(t => t + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isConnected]);
+
+  const streamUptimeString = useMemo(() => {
+    if (!isConnected) return '00h 00m 00s';
+    const now = Math.floor(Date.now() / 1000);
+    const start = (streamStartTime && streamStartTime > 0)
+      ? streamStartTime
+      : (connectionStartTimeRef.current || now);
+    const elapsed = Math.max(0, now - start);
+
+    const hours = Math.floor(elapsed / 3600);
+    const minutes = Math.floor((elapsed % 3600) / 60);
+    const seconds = elapsed % 60;
+
+    return `${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
+  }, [isConnected, streamStartTime, uptimeTicker]);
+
   const [ticker, setTicker] = useState(0);
 
   useEffect(() => {
@@ -407,6 +434,9 @@ export default function App() {
           if (data.nickname) {
             setHostNickname(prev => prev || data.nickname);
           }
+          if (data.startTime && data.startTime > 0) {
+            setStreamStartTime(data.startTime);
+          }
         }
       })
       .catch(err => {
@@ -419,7 +449,7 @@ export default function App() {
   }, [currentUsername]);
 
   useEffect(() => {
-    socket.on('connected', ({ username, userId, avatarUrl, nickname }: { username?: string; userId?: string; avatarUrl?: string; nickname?: string }) => {
+    socket.on('connected', ({ username, userId, avatarUrl, nickname, startTime }: { username?: string; userId?: string; avatarUrl?: string; nickname?: string; startTime?: number }) => {
       setIsConnected(true);
       setStatus('connected');
       if (username) {
@@ -433,6 +463,9 @@ export default function App() {
       }
       if (nickname) {
         setHostNickname(prev => prev || nickname);
+      }
+      if (startTime && startTime > 0) {
+        setStreamStartTime(startTime);
       }
       setError(null);
     });
@@ -452,7 +485,7 @@ export default function App() {
       }
     });
 
-    socket.on('room-update', (data: { viewerCount?: number, likes?: number, createTime?: number, hostAvatar?: string, topViewers?: any[] }) => {
+    socket.on('room-update', (data: { viewerCount?: number, likes?: number, createTime?: number, startTime?: number, hostAvatar?: string, topViewers?: any[] }) => {
       if (data.viewerCount !== undefined && typeof data.viewerCount === 'number' && !isNaN(data.viewerCount) && data.viewerCount > 0) {
         setViewerCount(data.viewerCount);
       }
@@ -461,6 +494,9 @@ export default function App() {
       }
       if (data.hostAvatar) {
         setHostAvatar(prev => prev || data.hostAvatar);
+      }
+      if (data.startTime && data.startTime > 0) {
+        setStreamStartTime(data.startTime);
       }
       if (data.topViewers && data.topViewers.length > 0) {
         const mappedViewers = data.topViewers.map((v: any) => ({
@@ -1012,7 +1048,9 @@ export default function App() {
       setBattles([]);
       setHostAvatar('');
       setHostNickname('');
+      setStreamStartTime(null);
     }
+    connectionStartTimeRef.current = Math.floor(Date.now() / 1000);
 
     const clean = username.trim().replace(/^@/, '');
     fetch(`/api/tiktok-user/${encodeURIComponent(clean)}`)
@@ -1020,6 +1058,7 @@ export default function App() {
       .then(data => {
         if (data?.avatarUrl) setHostAvatar(data.avatarUrl);
         if (data?.nickname) setHostNickname(data.nickname);
+        if (data?.startTime && data.startTime > 0) setStreamStartTime(data.startTime);
       })
       .catch(() => {});
     
@@ -1035,6 +1074,7 @@ export default function App() {
     setHostAvatar('');
     setHostNickname('');
     setViewerCount(0);
+    setStreamStartTime(null);
   };
 
   const topLikers = useMemo(() => {
@@ -1141,26 +1181,47 @@ export default function App() {
                   className="border border-zinc-700 font-bold text-xl shadow-inner shrink-0"
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  {/* Row 1: Streamer Name + Unique ID to its right */}
+                  <div className="flex items-baseline gap-2 flex-wrap">
                     <h3 className="font-bold text-base md:text-lg leading-tight text-zinc-100 truncate">
-                      {hostNickname && hostNickname !== currentUsername ? hostNickname : `@${currentUsername}`}
+                      {hostNickname || currentUsername}
                     </h3>
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium shrink-0">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                      Live
+                    <span className="text-xs text-zinc-400 font-medium truncate">
+                      @{currentUsername}
                     </span>
                   </div>
-                  {hostNickname && hostNickname !== currentUsername && (
-                    <p className="text-xs text-zinc-400 mt-0.5 truncate">@{currentUsername}</p>
-                  )}
-                  <a 
-                    href={`https://www.tiktok.com/@${currentUsername}/live`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] text-zinc-400 inline-flex items-center gap-1.5 hover:text-indigo-400 transition-colors mt-1.5"
-                  >
-                    Watch Live Stream <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
+
+                  {/* Row 2: Green LIVE badge + Watch Live Button + Live Time (desktop: same row, mobile: Live Time on row below) */}
+                  <div className="flex items-center gap-2.5 mt-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium shrink-0 shadow-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      LIVE
+                    </span>
+
+                    <a 
+                      href={`https://www.tiktok.com/@${currentUsername}/live`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:border-indigo-500/50 transition-all shadow-sm active:scale-95 shrink-0"
+                    >
+                      <span>Watch Live</span>
+                      <ExternalLink className="w-3 h-3 text-indigo-400" />
+                    </a>
+
+                    {/* Live Time: On desktop (md+) sits on the same row; on mobile (<md) wraps to the row below */}
+                    <div className="w-full md:w-auto mt-1 md:mt-0">
+                      <div 
+                        className="inline-flex items-center gap-1.5 text-xs font-mono px-2.5 py-1 rounded-lg bg-zinc-950/70 border border-indigo-500/30 text-zinc-300 shadow-inner group transition-colors hover:border-indigo-500/50"
+                        title={streamStartTime ? `Stream start time: ${new Date(streamStartTime * 1000).toLocaleTimeString()}` : 'Live stream elapsed time'}
+                      >
+                        <Clock className="w-3.5 h-3.5 text-indigo-400 shrink-0 animate-pulse" />
+                        <span className="text-zinc-400 text-[11px] font-sans">Live Time:</span>
+                        <span className="font-semibold text-indigo-300 tracking-tight font-mono">
+                          {streamUptimeString}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

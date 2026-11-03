@@ -197,6 +197,7 @@ export class EulerStreamLiveClient {
   private currentUsername: string = "";
   private hostAvatarUrl: string = "";
   private hostNickname: string = "";
+  private hostStartTime: number | null = null;
   private isExplicitDisconnect: boolean = false;
   private retryCount: number = 0;
   private maxRetries: number = 6;
@@ -293,6 +294,9 @@ export class EulerStreamLiveClient {
         if (data.nickname) {
           this.hostNickname = data.nickname;
         }
+        if (data.startTime) {
+          this.hostStartTime = Number(data.startTime);
+        }
       }
 
       if (!token) {
@@ -348,6 +352,7 @@ export class EulerStreamLiveClient {
           nickname: this.hostNickname || username,
           userId: `user_${username}`,
           avatarUrl: this.hostAvatarUrl || "",
+          startTime: this.hostStartTime || undefined,
         });
         this.emit("status", "connected");
       };
@@ -474,6 +479,15 @@ export class EulerStreamLiveClient {
           const num = typeof cTime === "string" ? parseInt(cTime, 10) : Number(cTime);
           cTime = num < 10000000000 ? num * 1000 : num;
         }
+
+        const rawStartTime = data.start_time ?? data.startTime ?? data.room_info?.start_time ?? data.roomInfo?.start_time ?? data.room?.start_time ?? data.create_time ?? data.createTime;
+        if (rawStartTime) {
+          const num = typeof rawStartTime === "string" ? parseInt(rawStartTime, 10) : Number(rawStartTime);
+          if (!isNaN(num) && num > 0) {
+            this.hostStartTime = num > 10000000000 ? Math.floor(num / 1000) : num;
+          }
+        }
+
         const extractedAvatar = extractAvatarUrl(data.owner || data.anchor || data.room || data);
         const hostAvatar = this.hostAvatarUrl || extractedAvatar;
         if (extractedAvatar && !this.hostAvatarUrl) {
@@ -490,6 +504,7 @@ export class EulerStreamLiveClient {
           viewerCount: vCount,
           likes: totalLikes > 0 ? totalLikes : (parseInt(data.likeCount || data.likes || "0", 10) || 0),
           createTime: cTime || Date.now(),
+          startTime: this.hostStartTime || undefined,
           hostAvatar: hostAvatar,
         });
 
@@ -508,6 +523,7 @@ export class EulerStreamLiveClient {
             nickname: data.owner?.nickname || this.hostNickname || this.currentUsername,
             userId: (data.owner?.id_str || data.owner?.id || "").toString(),
             avatarUrl: hostAvatar,
+            startTime: this.hostStartTime || undefined,
           });
         }
         break;
