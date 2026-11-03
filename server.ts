@@ -33,9 +33,6 @@ async function startServer() {
     username: string;
     nickname: string;
     avatarUrl: string;
-    startTime?: number;
-    isLive?: boolean;
-    roomId?: string;
   }
   const userProfileCache = new Map<string, { profile: TikTokUserProfile; timestamp: number }>();
   const CACHE_TTL_MS = 15 * 60 * 1000; // 15 min cache
@@ -46,12 +43,11 @@ async function startServer() {
 
     const cacheKey = clean.toLowerCase();
     const cached = userProfileCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS && cached.profile.startTime) {
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       return cached.profile;
     }
 
     try {
-      // 1. Fetch main profile page for avatar & nickname
       const res = await fetch(`https://www.tiktok.com/@${encodeURIComponent(clean)}`, {
         headers: {
           "User-Agent":
@@ -88,77 +84,10 @@ async function startServer() {
         }
       }
 
-      let startTime: number | undefined = undefined;
-      let isLive: boolean | undefined = undefined;
-      let roomId: string | undefined = undefined;
-
-      // 2. Attempt to extract live start_time from EulerStream SDK if available
-      try {
-        const client = getEulerClient();
-        if (client && client.rooms) {
-          const roomRes: any = await (client.rooms as any).fetchWebcastURL(undefined, undefined, clean);
-          const roomData = roomRes?.data?.data || roomRes?.data;
-          const roomInfo = roomData?.room_info || roomData?.roomInfo;
-          if (roomInfo) {
-            isLive = roomInfo.is_live ?? (roomInfo.status === 2 || roomInfo.status === 0);
-            roomId = roomInfo.id?.toString();
-            const rawStart = roomInfo.start_time ?? roomInfo.startTime ?? roomInfo.create_time ?? roomInfo.createTime;
-            if (rawStart) {
-              const parsed = Number(rawStart);
-              if (!isNaN(parsed) && parsed > 0) {
-                // Normalize Unix timestamp to seconds
-                startTime = parsed > 10000000000 ? Math.floor(parsed / 1000) : parsed;
-              }
-            }
-          }
-        }
-      } catch {
-        // Euler SDK might not be configured or user might not be in Euler cache yet
-      }
-
-      // 3. Fallback: Check TikTok /live page HTML for startTime
-      if (!startTime) {
-        try {
-          const liveRes = await fetch(`https://www.tiktok.com/@${encodeURIComponent(clean)}/live`, {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            },
-          });
-          if (liveRes.ok) {
-            const liveHtml = await liveRes.text();
-            const startMatch =
-              liveHtml.match(/"startTime":\s*(\d+)/) ||
-              liveHtml.match(/"start_time":\s*(\d+)/) ||
-              liveHtml.match(/"create_time":\s*(\d+)/) ||
-              liveHtml.match(/"createTime":\s*(\d+)/);
-
-            if (startMatch && startMatch[1]) {
-              const parsed = Number(startMatch[1]);
-              if (!isNaN(parsed) && parsed > 0) {
-                startTime = parsed > 10000000000 ? Math.floor(parsed / 1000) : parsed;
-                isLive = true;
-              }
-            }
-
-            const roomIdMatch = liveHtml.match(/"roomId":\s*"(\d+)"/) || liveHtml.match(/"room_id":\s*"(\d+)"/);
-            if (roomIdMatch && roomIdMatch[1]) {
-              roomId = roomIdMatch[1];
-            }
-          }
-        } catch (e) {
-          // ignore live scrape error
-        }
-      }
-
       const profile: TikTokUserProfile = {
         username: clean,
         nickname: nickname || clean,
         avatarUrl: avatarUrl || "",
-        startTime,
-        isLive,
-        roomId,
       };
 
       if (avatarUrl) {
@@ -490,7 +419,6 @@ async function startServer() {
         uniqueId: cleanUsername,
         avatarUrl: userProfile?.avatarUrl || "",
         nickname: userProfile?.nickname || cleanUsername,
-        startTime: userProfile?.startTime || null,
         expiresAt: jwtRes.data.config?.expiresAt,
         wsUrl: `wss://ws.eulerstream.com?uniqueId=${encodeURIComponent(cleanUsername)}&jwtKey=${encodeURIComponent(token)}`
       });
